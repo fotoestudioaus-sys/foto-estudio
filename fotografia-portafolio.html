@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estudio Fotográfico — Portafolio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&family=Bitter:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---- Fuentes: preset por defecto "Editorial Negativo" ---- */
+    --f-display: 'Newsreader', serif;
+    --f-body: 'Public Sans', sans-serif;
+    --f-mono: 'IBM Plex Mono', monospace;
+
+    /* ---- Paleta base: papel / tinta ---- */
+    --paper: #EDEDE6;
+    --paper-2: #E3E2D9;
+    --ink: #16171A;
+    --ink-soft: #4A4B47;
+
+    /* ---- Acento: preset por defecto "Ámbar de cuarto oscuro" ---- */
+    --accent: #E2A233;
+    --accent-ink: #16171A;
+    --accent-2: #3E6E64;
+
+    --radius: 2px;
+    --maxw: 1180px;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--f-body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  img{max-width:100%; display:block;}
+  a{color:inherit;}
+  button{font-family:inherit;}
+  .wrap{max-width:var(--maxw); margin:0 auto; padding:0 24px;}
+  .mono{font-family:var(--f-mono); letter-spacing:.02em;}
+  .eyebrow{
+    font-family:var(--f-mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ink-soft);
+  }
+  :focus-visible{outline:2px solid var(--accent); outline-offset:3px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.01ms !important; transition-duration:.01ms !important;} }
+
+  /* ---- tira de sprockets (firma visual: tira de negativo) ---- */
+  .sprockets{
+    height:14px;
+    background-image: repeating-linear-gradient(90deg, var(--ink) 0 6px, transparent 6px 22px);
+    background-position: center;
+    background-repeat: repeat-x;
+    background-size: 22px 6px;
+    opacity:.85;
+  }
+  .sprockets.top{margin-bottom:0;}
+
+  /* ---- header ---- */
+  header.site{
+    background:var(--paper);
+    border-bottom:1px solid rgba(0,0,0,.1);
+    position:sticky; top:0; z-index:40;
+  }
+  .nav{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 0;
+  }
+  .brand{
+    font-family:var(--f-display); font-weight:600; font-size:22px; letter-spacing:.01em;
+    text-decoration:none;
+  }
+  .brand .dot{color:var(--accent);}
+  .navlinks{display:flex; gap:28px; align-items:center;}
+  .navlinks a{
+    font-family:var(--f-mono); font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+    text-decoration:none; color:var(--ink); border-bottom:1px solid transparent; padding-bottom:2px;
+    cursor:pointer;
+  }
+  .navlinks a:hover{border-color:var(--accent);}
+  .navlinks button.admin-link{
+    background:none;border:none;cursor:pointer;color:var(--ink-soft);font-family:var(--f-mono);
+    font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+  }
+
+  /* ---- hero ---- */
+  .hero{
+    position:relative;
+    display:grid; grid-template-columns: 1.1fr .9fr; gap:0;
+    min-height:560px;
+    background:var(--ink);
+    color:var(--paper);
+    overflow:hidden;
+  }
+  .hero-copy{
+    padding:80px 56px; display:flex; flex-direction:column; justify-content:center; gap:22px; z-index:2;
+  }
+  .hero-copy .eyebrow{color:var(--accent);}
+  .hero-title{
+    font-family:var(--f-display); font-style:italic; font-weight:500;
+    font-size:clamp(38px, 5vw, 64px); line-height:1.04; margin:0; max-width:12ch;
+  }
+  .hero-sub{
+    font-size:16px; color:#D9D8CE; max-width:42ch; margin:0;
+  }
+  .hero-cta{display:flex; gap:14px; margin-top:6px; flex-wrap:wrap;}
+  .btn{
+    font-family:var(--f-mono); font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+    padding:13px 22px; border:1px solid var(--paper); background:transparent; color:var(--paper);
+    cursor:pointer; text-decoration:none; display:inline-block; border-radius:var(--radius);
+    transition:background .15s, color .15s;
+  }
+  .btn:hover{background:var(--paper); color:var(--ink);}
+  .btn.solid{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
+  .btn.solid:hover{filter:brightness(1.08); background:var(--accent); color:var(--accent-ink);}
+  .hero-img{position:relative; overflow:hidden;}
+  .hero-img img{width:100%; height:100%; object-fit:cover; min-height:400px; opacity:.92;}
+  .hero-frame{
+    position:absolute; top:20px; right:20px; font-family:var(--f-mono); font-size:11px;
+    color:var(--paper); background:rgba(0,0,0,.45); padding:4px 8px; border:1px solid rgba(255,255,255,.4);
+  }
+
+  /* ---- secciones ---- */
+  section{padding:88px 0;}
+  .section-head{
+    display:flex; align-items:baseline; justify-content:space-between; gap:24px; margin-bottom:40px;
+    flex-wrap:wrap;
+  }
+  .section-title{
+    font-family:var(--f-display); font-size:34px; font-weight:600; margin:6px 0 0;
+  }
+
+  /* ---- filtros de categoría ---- */
+  .filters{display:flex; gap:10px; flex-wrap:wrap;}
+  .filter-btn{
+    font-family:var(--f-mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    padding:8px 14px; border:1px solid var(--ink); background:transparent; cursor:pointer;
+    border-radius:20px;
+  }
+  .filter-btn.active{background:var(--ink); color:var(--paper);}
+
+  /* ---- hoja de contactos (grid de portafolio) ---- */
+  .contact-sheet{
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:2px;
+    background:var(--ink);
+    border:2px solid var(--ink);
+  }
+  .frame{
+    position:relative; background:var(--ink); aspect-ratio:4/5; overflow:hidden; cursor:pointer;
+  }
+  .frame img{width:100%; height:100%; object-fit:cover; transition:transform .5s ease, opacity .3s;}
+  .frame:hover img{transform:scale(1.045);}
+  .frame-num{
+    position:absolute; top:8px; left:8px; font-family:var(--f-mono); font-size:10px; color:#fff;
+    background:rgba(0,0,0,.5); padding:2px 6px; letter-spacing:.05em;
+  }
+  .frame-cap{
+    position:absolute; left:0; right:0; bottom:0; padding:8px 10px; font-family:var(--f-mono); font-size:10.5px;
+    color:#fff; background:linear-gradient(0deg, rgba(0,0,0,.75), transparent); opacity:0; transition:opacity .2s;
+  }
+  .frame:hover .frame-cap{opacity:1;}
+  .empty-state{
+    grid-column:1/-1; padding:60px 20px; text-align:center; color:var(--ink-soft); font-family:var(--f-mono); font-size:13px;
+  }
+  @media (max-width:820px){ .contact-sheet{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:480px){ .contact-sheet{grid-template-columns:repeat(1,1fr);} }
+
+  /* ---- lightbox ---- */
+  .lightbox{
+    position:fixed; inset:0; background:rgba(10,10,10,.94); z-index:100;
+    display:flex; align-items:center; justify-content:center; padding:40px;
+  }
+  .lightbox img{max-height:88vh; max-width:88vw; object-fit:contain;}
+  .lightbox-close{
+    position:absolute; top:24px; right:32px; background:none; border:none; color:#fff; font-size:28px; cursor:pointer;
+    font-family:var(--f-mono);
+  }
+  .lightbox-cap{position:absolute; bottom:26px; left:0; right:0; text-align:center; color:#ddd; font-family:var(--f-mono); font-size:12px;}
+
+  /* ---- about ---- */
+  .about{
+    display:grid; grid-template-columns:.85fr 1.15fr; gap:64px; align-items:center;
+  }
+  .about img{aspect-ratio:4/5; object-fit:cover; width:100%;}
+  .about-text p{font-size:16.5px; color:var(--ink-soft); max-width:56ch;}
+  @media (max-width:760px){ .about{grid-template-columns:1fr;} }
+
+  /* ---- contacto ---- */
+  .contact-band{background:var(--ink); color:var(--paper);}
+  .contact-band .section-title{color:var(--paper);}
+  .contact-grid{display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:30px;}
+  .contact-info p{color:#D9D8CE; max-width:50ch;}
+  .contact-links{display:flex; gap:18px; flex-wrap:wrap;}
+
+  footer.site{padding:26px 0; font-family:var(--f-mono); font-size:11px; color:var(--ink-soft); display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px;}
+
+  /* =====================================================
+     ADMIN — panel "cuarto oscuro": tema oscuro, utilitario
+     ===================================================== */
+  .admin-shell{
+    min-height:100vh; background:#0F1113; color:#E7E6DF; font-family:var(--f-body);
+  }
+  .admin-top{
+    display:flex; align-items:center; justify-content:space-between; padding:16px 28px;
+    border-bottom:1px solid #23262A; background:#0B0D0E; position:sticky; top:0; z-index:10;
+  }
+  .admin-top .brand{color:#E7E6DF; font-size:17px;}
+  .admin-top .brand .dot{color:var(--accent);}
+  .admin-actions{display:flex; gap:12px; align-items:center;}
+  .admin-actions .btn{border-color:#3A3D41; color:#E7E6DF;}
+  .admin-actions .btn:hover{background:#E7E6DF; color:#0F1113;}
+  .admin-body{display:grid; grid-template-columns:220px 1fr; min-height:calc(100vh - 60px);}
+  .admin-nav{border-right:1px solid #23262A; padding:24px 0;}
+  .admin-nav button{
+    display:block; width:100%; text-align:left; padding:12px 26px; background:none; border:none; color:#9C9C93;
+    font-family:var(--f-mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em; cursor:pointer;
+    border-left:2px solid transparent;
+  }
+  .admin-nav button.active{color:#fff; border-left-color:var(--accent); background:#16181B;}
+  .admin-main{padding:36px 40px; max-width:920px;}
+  .admin-h{font-family:var(--f-mono); font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:#9C9C93; margin-bottom:6px;}
+  .admin-title{font-family:var(--f-display); font-size:26px; margin:0 0 28px; color:#fff;}
+  .field{margin-bottom:20px;}
+  .field label{display:block; font-family:var(--f-mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:#9C9C93; margin-bottom:7px;}
+  .field input[type=text], .field input[type=email], .field input[type=tel], .field input[type=url], .field input[type=password], .field textarea, .field select{
+    width:100%; background:#16181B; border:1px solid #2B2E32; color:#E7E6DF; padding:11px 13px; border-radius:3px;
+    font-family:var(--f-body); font-size:14px;
+  }
+  .field textarea{min-height:90px; resize:vertical;}
+  .field input:focus, .field textarea:focus, .field select:focus{outline:2px solid var(--accent); border-color:var(--accent);}
+  .row{display:grid; gap:16px;}
+  .row.cols-2{grid-template-columns:1fr 1fr;}
+  .row.cols-3{grid-template-columns:1fr 1fr 1fr;}
+  @media (max-width:700px){ .row.cols-2, .row.cols-3{grid-template-columns:1fr;} }
+  .card{background:#16181B; border:1px solid #23262A; padding:20px; border-radius:4px; margin-bottom:16px;}
+  .btn-dark{
+    font-family:var(--f-mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+    padding:11px 18px; background:var(--accent); color:#16171A; border:none; cursor:pointer; border-radius:3px;
+  }
+  .btn-dark:hover{filter:brightness(1.08);}
+  .btn-ghost{
+    font-family:var(--f-mono); font-size:12px; text-transform:uppercase; letter-spacing:.06em;
+    padding:10px 16px; background:transparent; color:#E7E6DF; border:1px solid #3A3D41; cursor:pointer; border-radius:3px;
+  }
+  .btn-ghost:hover{border-color:#E7E6DF;}
+  .btn-danger{color:#E06B5A; border-color:#4a2c26;}
+  .btn-danger:hover{background:#2a1512; border-color:#E06B5A;}
+  .save-msg{font-family:var(--f-mono); font-size:12px; color:#7FBF8A; margin-left:14px;}
+  .thumb-row{display:flex; gap:14px; align-items:center; padding:12px; border:1px solid #23262A; border-radius:4px; margin-bottom:10px; background:#121415;}
+  .thumb-row img{width:64px; height:64px; object-fit:cover; border-radius:3px; flex-shrink:0;}
+  .thumb-meta{flex:1; min-width:0;}
+  .thumb-meta .cap{font-size:13px;}
+  .thumb-meta .cat{font-family:var(--f-mono); font-size:10.5px; color:#9C9C93; text-transform:uppercase;}
+  .thumb-actions{display:flex; gap:8px; flex-shrink:0;}
+  .icon-btn{background:none; border:1px solid #3A3D41; color:#E7E6DF; width:30px; height:30px; border-radius:3px; cursor:pointer; font-size:13px;}
+  .icon-btn:hover{border-color:#E7E6DF;}
+  .icon-btn.danger{border-color:#4a2c26; color:#E06B5A;}
+  .icon-btn.danger:hover{background:#2a1512;}
+  .swatch-row{display:flex; gap:12px; flex-wrap:wrap;}
+  .swatch{
+    border:1px solid #2B2E32; border-radius:5px; padding:12px 14px; cursor:pointer; background:#16181B; min-width:150px;
+  }
+  .swatch.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+  .swatch .dots{display:flex; gap:6px; margin-bottom:8px;}
+  .swatch .dots span{width:16px; height:16px; border-radius:50%; display:inline-block;}
+  .swatch .name{font-family:var(--f-mono); font-size:11px; color:#E7E6DF;}
+  .hint{font-family:var(--f-mono); font-size:11px; color:#7C7C74; line-height:1.6; margin-top:6px;}
+  .gallery-link-box{
+    display:flex; gap:8px; align-items:center; background:#0B0D0E; border:1px solid #2B2E32; padding:10px 12px; border-radius:3px;
+  }
+  .gallery-link-box input{background:none; border:none; color:#E7E6DF; font-family:var(--f-mono); font-size:12.5px; flex:1;}
+  .status-pill{font-family:var(--f-mono); font-size:10px; text-transform:uppercase; padding:3px 8px; border-radius:10px; letter-spacing:.05em;}
+  .status-pill.ok{background:#173323; color:#7FBF8A;}
+  .status-pill.warn{background:#3a2f14; color:#E2A233;}
+  .status-pill.expired{background:#3a1414; color:#E06B5A;}
+
+  /* login */
+  .login-shell{min-height:100vh; background:#0F1113; color:#E7E6DF; display:flex; align-items:center; justify-content:center; padding:20px;}
+  .login-card{width:100%; max-width:380px; background:#16181B; border:1px solid #23262A; padding:36px 32px; border-radius:6px;}
+  .login-card h1{font-family:var(--f-display); font-size:24px; margin:0 0 6px;}
+  .login-card p.eyebrow{margin-bottom:20px;}
+  .error-msg{color:#E06B5A; font-family:var(--f-mono); font-size:12px; margin-top:10px;}
+
+  /* ---- página de galería de cliente ---- */
+  .gallery-hero{
+    background:var(--ink); color:var(--paper); padding:70px 0 46px; text-align:center;
+  }
+  .gallery-hero .eyebrow{color:var(--accent); justify-content:center; display:flex;}
+  .gallery-hero h1{font-family:var(--f-display); font-style:italic; font-size:clamp(30px,4.5vw,46px); margin:10px 0;}
+  .gallery-meta{font-family:var(--f-mono); font-size:12px; color:#B9B8AC;}
+  .gallery-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; padding:50px 0;}
+  @media (max-width:820px){ .gallery-grid{grid-template-columns:repeat(2,1fr);} }
+  @media (max-width:480px){ .gallery-grid{grid-template-columns:1fr;} }
+  .gallery-grid .frame{aspect-ratio:3/2; border-radius:3px;}
+  .expired-box{
+    max-width:520px; margin:100px auto; text-align:center; padding:0 20px;
+  }
+  .expired-box .eyebrow{justify-content:center; display:flex; color:#E06B5A;}
+  .expired-box h1{font-family:var(--f-display); font-size:28px;}
+  .loading-box{min-height:60vh; display:flex; align-items:center; justify-content:center; font-family:var(--f-mono); color:var(--ink-soft);}
+</style>
+</head>
+<body>
+<div id="app" class="loading-box">Cargando estudio…</div>
+
+<script>
+/* =====================================================================
+   ESTUDIO — prototipo de sitio fotográfico con panel admin y galerías
+   temporales para clientes. Todo el contenido vive en una hoja de Google
+   Sheets conectada vía Google Apps Script (ver configuración abajo).
+   ===================================================================== */
+
+/* =====================================================================
+   CONFIGURACIÓN DE GUARDADO REAL (Google Sheets vía Apps Script)
+   -----------------------------------------------------------------
+   Pega aquí abajo, entre las comillas, la URL que te da Google Apps
+   Script al publicar el backend (termina en /exec).
+   Sigue la guía "guia-produccion.md" → sección "Backend con Google
+   Sheets" para crear esa URL paso a paso.
+   Mientras no la pegues, el sitio funciona en modo de solo lectura
+   con los textos y fotos por defecto, y el panel de administrador
+   te avisará que falta este paso.
+   ===================================================================== */
+const API_URL = 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT';
+
+const STORAGE_AVAILABLE = !!API_URL && !API_URL.includes('PEGA_AQUI');
+
+const STORAGE = {
+  async get(key, shared=true){
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      const res = await fetch(`${API_URL}?action=get&key=${encodeURIComponent(key)}`);
+      const data = await res.json();
+      return (data && data.value !== null && data.value !== undefined && data.value !== '') ? JSON.parse(data.value) : null;
+    } catch(e){ console.error('Error leyendo', key, e); return null; }
+  },
+  async set(key, value, shared=true){
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      await fetch(API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'set', key, value: JSON.stringify(value) })
+      });
+      return true;
+    } catch(e){ console.error('Error guardando', key, e); return null; }
+  },
+  async delete(key, shared=true){
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      await fetch(API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'delete', key })
+      });
+      return true;
+    } catch(e){ return null; }
+  }
+};
+
+const FONT_PRESETS = {
+  editorial: { name:'Editorial Negativo', display:"'Newsreader', serif", body:"'Public Sans', sans-serif", mono:"'IBM Plex Mono', monospace" },
+  contacto:  { name:'Contacto Clásico',   display:"'Bitter', serif",     body:"'Work Sans', sans-serif",   mono:"'IBM Plex Mono', monospace" },
+  tecnico:   { name:'Técnico',            display:"'Space Grotesk', sans-serif", body:"'Work Sans', sans-serif", mono:"'Space Mono', monospace" }
+};
+const COLOR_PRESETS = {
+  ambar: { name:'Ámbar de cuarto oscuro', accent:'#E2A233', accent2:'#3E6E64' },
+  rojo:  { name:'Rojo luz de seguridad',  accent:'#C8432E', accent2:'#2C4A52' },
+  cian:  { name:'Cian de negativo',       accent:'#2E8B8B', accent2:'#B5482E' }
+};
+const DEFAULT_CONTENT = {
+  heroTitle: 'Luz, encuadre\ny memoria.',
+  heroSubtitle: 'Fotografía de retrato, boda, producto y evento. Cada sesión es una hoja de contactos hecha a la medida de quien la vive.',
+  heroImage: 'https://images.unsplash.com/photo-1554048612-b6a482bc67e5?q=80&w=1400&auto=format&fit=crop',
+  aboutTitle: 'Sobre el estudio',
+  aboutText: 'Soy fotógrafo y trabajo distintos géneros: retrato, boda, producto y cobertura de evento. Me interesa lo que pasa antes y después de la pose — el gesto que no se repite. Cada entrega se piensa como una hoja de contactos: un archivo curado, no un vaciado de tarjeta de memoria.',
+  aboutImage: 'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?q=80&w=1000&auto=format&fit=crop',
+  contactEmail: 'fotoestudioaus@gmail.com',
+  contactPhone: '',
+  instagram: '@fotoestudioaus',
+  calendlyLink: 'https://calendly.com/fotoestudioaus/30min'
+};
+const DEFAULT_DESIGN = { font:'editorial', color:'ambar' };
+const DEFAULT_PORTFOLIO = [
+  { id:'p1', url:'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=900&auto=format&fit=crop', category:'Boda', caption:'Ceremonia · luz natural' },
+  { id:'p2', url:'https://images.unsplash.com/photo-1552058544-f2b08422138a?q=80&w=900&auto=format&fit=crop', category:'Retrato', caption:'Retrato de estudio' },
+  { id:'p3', url:'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?q=80&w=900&auto=format&fit=crop', category:'Producto', caption:'Catálogo · fondo blanco' },
+  { id:'p4', url:'https://images.unsplash.com/photo-1519225421980-715cb0215aed?q=80&w=900&auto=format&fit=crop', category:'Evento', caption:'Cobertura corporativa' },
+  { id:'p5', url:'https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=900&auto=format&fit=crop', category:'Retrato', caption:'Retrato ambiental' },
+  { id:'p6', url:'https://images.unsplash.com/photo-1465495976277-4387d4b0b4c6?q=80&w=900&auto=format&fit=crop', category:'Boda', caption:'Recepción' }
+];
+const DEFAULT_PASSWORD = 'admin123';
+
+let state = {
+  content: null, design: null, portfolio: null,
+  view: 'public', // public | admin-login | admin | gallery
+  isAdmin: false,
+  adminTab: 'contenido',
+  activeFilter: 'Todas',
+  lightbox: null,
+  galleryId: null,
+  galleryData: null,
+  saveMsg: ''
+};
+
+function applyDesign(design){
+  const f = FONT_PRESETS[design.font] || FONT_PRESETS.editorial;
+  const c = COLOR_PRESETS[design.color] || COLOR_PRESETS.ambar;
+  const root = document.documentElement.style;
+  root.setProperty('--f-display', f.display);
+  root.setProperty('--f-body', f.body);
+  root.setProperty('--f-mono', f.mono);
+  root.setProperty('--accent', c.accent);
+  root.setProperty('--accent-2', c.accent2);
+}
+
+function fileIdFromDriveUrl(url){
+  const m1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if(m1) return m1[1];
+  const m2 = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(m2) return m2[1];
+  return null;
+}
+function normalizeImageUrl(url){
+  if(!url) return url;
+  if(url.includes('drive.google.com')){
+    const id = fileIdFromDriveUrl(url);
+    if(id) return `https://drive.google.com/uc?export=view&id=${id}`;
+  }
+  return url;
+}
+
+function addMonths(date, months){
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+function fmtDate(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
+}
+function uid(){ return Math.random().toString(36).slice(2,9); }
+
+async function loadInitial(){
+  const params = new URLSearchParams(window.location.search);
+  const g = params.get('g');
+  const adminParam = params.has('admin');
+
+  let [content, design, portfolio] = await Promise.all([
+    STORAGE.get('site:content'), STORAGE.get('site:design'), STORAGE.get('site:portfolio')
+  ]);
+  if(!content){ content = DEFAULT_CONTENT; await STORAGE.set('site:content', content); }
+  else if(!content.calendlyLink){ content = {...DEFAULT_CONTENT, ...content, calendlyLink: DEFAULT_CONTENT.calendlyLink}; await STORAGE.set('site:content', content); }
+  if(!design){ design = DEFAULT_DESIGN; await STORAGE.set('site:design', design); }
+  if(!portfolio){ portfolio = DEFAULT_PORTFOLIO; await STORAGE.set('site:portfolio', portfolio); }
+
+  let pass = await STORAGE.get('site:admin-pass');
+  if(!pass){ pass = { value: DEFAULT_PASSWORD }; await STORAGE.set('site:admin-pass', pass); }
+
+  state.content = content; state.design = design; state.portfolio = portfolio;
+  applyDesign(design);
+
+  if(g){
+    state.view = 'gallery'; state.galleryId = g;
+    state.galleryData = await STORAGE.get('gallery:' + g);
+    render();
+  } else if(adminParam){
+    state.view = 'admin-login';
+    render();
+  } else {
+    state.view = 'public';
+    render();
+  }
+}
+
+/* ---------------------------- RENDER ROOT ---------------------------- */
+function render(){
+  const app = document.getElementById('app');
+  app.className = '';
+  if(state.view === 'public') app.innerHTML = renderPublic();
+  else if(state.view === 'gallery') app.innerHTML = renderGallery();
+  else if(state.view === 'admin-login') app.innerHTML = renderLogin();
+  else if(state.view === 'admin') app.innerHTML = renderAdmin();
+  bindEvents();
+}
+
+/* ---------------------------- PUBLIC SITE ---------------------------- */
+function renderPublic(){
+  const c = state.content;
+  const cats = ['Todas', ...Array.from(new Set(state.portfolio.map(p=>p.category)))];
+  const items = state.activeFilter === 'Todas' ? state.portfolio : state.portfolio.filter(p=>p.category===state.activeFilter);
+
+  return `
+  <header class="site">
+    <div class="wrap nav">
+      <a href="#" class="brand">Estudio<span class="dot">·</span>Foto</a>
+      <div class="navlinks">
+        <a href="#portafolio">Portafolio</a>
+        <a href="#sobre-mi">Sobre mí</a>
+        <a href="#contacto">Contacto</a>
+        <button class="admin-link" data-action="go-admin" title="Acceso administrador">Acceso</button>
+      </div>
+    </div>
+  </header>
+  <div class="sprockets top"></div>
+
+  <section class="hero" style="padding:0;">
+    <div class="hero-copy">
+      <div class="eyebrow">Fotografía · retrato / boda / producto / evento</div>
+      <h1 class="hero-title">${nl2br(c.heroTitle)}</h1>
+      <p class="hero-sub">${escapeHtml(c.heroSubtitle)}</p>
+      <div class="hero-cta">
+        <a class="btn solid" href="${c.calendlyLink}" target="_blank" rel="noopener">Agendar sesión</a>
+        <a class="btn" href="#portafolio">Ver portafolio</a>
+      </div>
+    </div>
+    <div class="hero-img">
+      <img src="${c.heroImage}" alt="Fotografía destacada">
+      <div class="hero-frame mono">35mm · f/2.8</div>
+    </div>
+  </section>
+  <div class="sprockets"></div>
+
+  <section id="portafolio">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">Hoja de contactos</div>
+          <h2 class="section-title">Portafolio</h2>
+        </div>
+        <div class="filters">
+          ${cats.map(cat=>`<button class="filter-btn ${cat===state.activeFilter?'active':''}" data-action="filter" data-cat="${escapeHtml(cat)}">${escapeHtml(cat)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="contact-sheet">
+        ${items.length ? items.map((p,i)=>`
+          <div class="frame" data-action="open-lightbox" data-idx="${state.portfolio.indexOf(p)}">
+            <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy">
+            <div class="frame-num mono">N° ${String(i+1).padStart(2,'0')}</div>
+            <div class="frame-cap">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
+          </div>
+        `).join('') : `<div class="empty-state">Todavía no hay fotos en esta categoría.</div>`}
+      </div>
+    </div>
+  </section>
+
+  <div class="sprockets"></div>
+  <section id="sobre-mi">
+    <div class="wrap about">
+      <img src="${c.aboutImage}" alt="Foto del fotógrafo">
+      <div class="about-text">
+        <div class="eyebrow">Detrás de cámara</div>
+        <h2 class="section-title">${escapeHtml(c.aboutTitle)}</h2>
+        <p>${escapeHtml(c.aboutText)}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="contact-band" id="contacto">
+    <div class="wrap">
+      <div class="eyebrow" style="color:var(--accent)">Reservar</div>
+      <h2 class="section-title">Contacto</h2>
+      <div class="contact-grid" style="margin-top:24px;">
+        <div class="contact-info">
+          <p>¿Tienes una sesión en mente? Escríbeme y armamos la propuesta: boda, retrato, producto o evento.</p>
+        </div>
+        <div class="contact-links">
+          <a class="btn solid" href="${c.calendlyLink}" target="_blank" rel="noopener">Agendar cita</a>
+          <a class="btn" href="mailto:${c.contactEmail}">${escapeHtml(c.contactEmail)}</a>
+          <a class="btn" href="https://instagram.com/${(c.instagram||'').replace('@','')}" target="_blank" rel="noopener">${escapeHtml(c.instagram)}</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="sprockets"></div>
+  <footer class="site">
+    <div class="wrap" style="display:flex; justify-content:space-between; width:100%;">
+      <span>© ${new Date().getFullYear()} Estudio·Foto</span>
+      <span>Hecho a mano, sesión por sesión</span>
+    </div>
+  </footer>
+
+  ${state.lightbox !== null ? renderLightbox() : ''}
+  `;
+}
+
+function renderLightbox(){
+  const p = state.portfolio[state.lightbox];
+  if(!p) return '';
+  return `
+  <div class="lightbox" data-action="close-lightbox">
+    <button class="lightbox-close" data-action="close-lightbox">✕</button>
+    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}">
+    <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
+  </div>`;
+}
+
+/* ---------------------------- CLIENT GALLERY ---------------------------- */
+function renderGallery(){
+  const g = state.galleryData;
+  if(!g){
+    return `<div class="expired-box">
+      <div class="eyebrow">Galería no encontrada</div>
+      <h1>Este enlace no corresponde a ninguna galería activa.</h1>
+      <p class="hint" style="margin-top:14px;">Verifica el enlace con tu fotógrafo.</p>
+    </div>`;
+  }
+  const expired = new Date(g.expiresAt) < new Date();
+  if(expired){
+    return `<div class="expired-box">
+      <div class="eyebrow">Enlace expirado</div>
+      <h1>Esta galería ya no está disponible.</h1>
+      <p class="hint" style="margin-top:14px;">Expiró el ${fmtDate(g.expiresAt)}. Pide a tu fotógrafo que genere un nuevo enlace.</p>
+    </div>`;
+  }
+  return `
+  <div class="gallery-hero">
+    <div class="wrap">
+      <div class="eyebrow mono">Galería privada</div>
+      <h1>${escapeHtml(g.name)}</h1>
+      <div class="gallery-meta">${g.photos.length} fotografías · disponible hasta ${fmtDate(g.expiresAt)}</div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="gallery-grid">
+      ${g.photos.map((p,i)=>`
+        <div class="frame" data-action="open-gallery-lightbox" data-idx="${i}">
+          <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy">
+          <div class="frame-num mono">N° ${String(i+1).padStart(2,'0')}</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  ${state.lightbox !== null ? renderGalleryLightbox() : ''}
+  `;
+}
+function renderGalleryLightbox(){
+  const p = state.galleryData.photos[state.lightbox];
+  if(!p) return '';
+  return `
+  <div class="lightbox" data-action="close-lightbox">
+    <button class="lightbox-close" data-action="close-lightbox">✕</button>
+    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}">
+    <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} · clic derecho → guardar imagen</div>
+  </div>`;
+}
+
+/* ---------------------------- ADMIN LOGIN ---------------------------- */
+function renderLogin(){
+  return `
+  <div class="login-shell">
+    <div class="login-card">
+      <p class="eyebrow mono">Panel del estudio</p>
+      <h1>Acceso administrador</h1>
+      <div class="field" style="margin-top:18px;">
+        <label>Contraseña</label>
+        <input type="password" id="admin-pass-input" placeholder="••••••••">
+      </div>
+      ${!STORAGE_AVAILABLE ? '<p class="hint" style="color:#E2A233;">Aún no conectaste el backend de guardado (Google Sheets). Por ahora solo funciona la contraseña por defecto y ningún cambio se guardará. Sigue la guía "Backend con Google Sheets" para activarlo.</p>' : ''}
+      <button class="btn-dark" data-action="try-login" style="width:100%;">Entrar</button>
+      <div id="login-error"></div>
+      <p class="hint" style="margin-top:18px;">Prototipo — contraseña por defecto: <span class="mono">admin123</span>. Cámbiala desde el panel una vez dentro.</p>
+      <p class="hint"><a href="#" data-action="go-public" style="color:#9C9C93;">← Volver al sitio público</a></p>
+    </div>
+  </div>`;
+}
+
+/* ---------------------------- ADMIN PANEL ---------------------------- */
+function renderAdmin(){
+  return `
+  <div class="admin-shell">
+    <div class="admin-top">
+      <div class="brand">Estudio<span class="dot">·</span>Foto — Panel</div>
+      <div class="admin-actions">
+        <span class="save-msg mono">${state.saveMsg}</span>
+        <button class="btn" data-action="go-public">Ver sitio público</button>
+        <button class="btn" data-action="logout">Cerrar sesión</button>
+      </div>
+    </div>
+    <div class="admin-body">
+      <nav class="admin-nav">
+        ${tabBtn('contenido','Contenido')}
+        ${tabBtn('diseno','Diseño')}
+        ${tabBtn('portafolio','Portafolio')}
+        ${tabBtn('galerias','Galerías de clientes')}
+        ${tabBtn('cuenta','Cuenta')}
+      </nav>
+      <div class="admin-main" id="admin-main">
+        ${state.adminTab==='contenido' ? adminContenido() : ''}
+        ${state.adminTab==='diseno' ? adminDiseno() : ''}
+        ${state.adminTab==='portafolio' ? adminPortafolio() : ''}
+        ${state.adminTab==='galerias' ? adminGalerias() : ''}
+        ${state.adminTab==='cuenta' ? adminCuenta() : ''}
+      </div>
+    </div>
+  </div>`;
+}
+function tabBtn(key,label){
+  return `<button class="${state.adminTab===key?'active':''}" data-action="tab" data-tab="${key}">${label}</button>`;
+}
+
+function adminContenido(){
+  const c = state.content;
+  return `
+  <div class="admin-h">Textos del sitio</div>
+  <h1 class="admin-title">Contenido</h1>
+
+  <div class="card">
+    <div class="field"><label>Título del hero (usa salto de línea si quieres partir el texto)</label>
+      <textarea id="f-heroTitle">${escapeHtml(c.heroTitle)}</textarea></div>
+    <div class="field"><label>Subtítulo del hero</label>
+      <textarea id="f-heroSubtitle">${escapeHtml(c.heroSubtitle)}</textarea></div>
+    <div class="field"><label>Imagen del hero (URL)</label>
+      <input type="url" id="f-heroImage" value="${escapeHtml(c.heroImage)}"></div>
+  </div>
+
+  <div class="card">
+    <div class="field"><label>Título de "Sobre mí"</label>
+      <input type="text" id="f-aboutTitle" value="${escapeHtml(c.aboutTitle)}"></div>
+    <div class="field"><label>Texto de "Sobre mí"</label>
+      <textarea id="f-aboutText" style="min-height:140px;">${escapeHtml(c.aboutText)}</textarea></div>
+    <div class="field"><label>Imagen de "Sobre mí" (URL)</label>
+      <input type="url" id="f-aboutImage" value="${escapeHtml(c.aboutImage)}"></div>
+  </div>
+
+  <div class="card">
+    <div class="row cols-2">
+      <div class="field"><label>Correo de contacto</label><input type="email" id="f-contactEmail" value="${escapeHtml(c.contactEmail)}"></div>
+      <div class="field"><label>Instagram (@usuario)</label><input type="text" id="f-instagram" value="${escapeHtml(c.instagram)}"></div>
+    </div>
+    <div class="field"><label>Liga para agendar citas (Calendly)</label>
+      <input type="url" id="f-calendlyLink" value="${escapeHtml(c.calendlyLink)}"></div>
+  </div>
+
+  <button class="btn-dark" data-action="save-contenido">Guardar cambios</button>
+  `;
+}
+
+function adminDiseno(){
+  const d = state.design;
+  return `
+  <div class="admin-h">Identidad visual</div>
+  <h1 class="admin-title">Diseño</h1>
+
+  <div class="card">
+    <label style="display:block; font-family:var(--f-mono); font-size:11px; text-transform:uppercase; color:#9C9C93; margin-bottom:12px;">Tipografía</label>
+    <div class="swatch-row">
+      ${Object.entries(FONT_PRESETS).map(([key,f])=>`
+        <div class="swatch ${d.font===key?'active':''}" data-action="set-font" data-key="${key}">
+          <div class="name" style="font-family:${f.display}; font-size:16px; margin-bottom:4px;">Aa</div>
+          <div class="name">${f.name}</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+
+  <div class="card">
+    <label style="display:block; font-family:var(--f-mono); font-size:11px; text-transform:uppercase; color:#9C9C93; margin-bottom:12px;">Color de acento</label>
+    <div class="swatch-row">
+      ${Object.entries(COLOR_PRESETS).map(([key,c])=>`
+        <div class="swatch ${d.color===key?'active':''}" data-action="set-color" data-key="${key}">
+          <div class="dots"><span style="background:${c.accent}"></span><span style="background:${c.accent2}"></span></div>
+          <div class="name">${c.name}</div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  <p class="hint">Los cambios de diseño se ven al instante en el sitio público (columna "Ver sitio público").</p>
+  `;
+}
+
+function adminPortafolio(){
+  const items = state.portfolio;
+  return `
+  <div class="admin-h">Fotos públicas del sitio</div>
+  <h1 class="admin-title">Portafolio</h1>
+
+  <div class="card">
+    <div class="admin-h" style="margin-bottom:14px;">Agregar foto</div>
+    <div class="row cols-2">
+      <div class="field"><label>URL de la imagen</label><input type="url" id="np-url" placeholder="https://... o enlace de Google Drive"></div>
+      <div class="field"><label>Categoría</label><input type="text" id="np-category" placeholder="Retrato, Boda, Producto…"></div>
+    </div>
+    <div class="field"><label>Descripción corta</label><input type="text" id="np-caption" placeholder="Ej. Sesión exterior, luz de tarde"></div>
+    <div class="field">
+      <label>O sube un archivo desde tu equipo</label>
+      <input type="file" id="np-file" accept="image/*">
+      <p class="hint">Se comprime automáticamente para el prototipo. Para fotos en alta resolución reales, usa una URL (recomendado: enlace de Google Drive).</p>
+    </div>
+    <button class="btn-dark" data-action="add-photo">Añadir al portafolio</button>
+  </div>
+
+  <div class="admin-h" style="margin-top:30px;">Fotos actuales (${items.length})</div>
+  ${items.map((p)=>`
+    <div class="thumb-row">
+      <img src="${p.url}" alt="">
+      <div class="thumb-meta">
+        <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
+        <div class="cat">${escapeHtml(p.category||'sin categoría')}</div>
+      </div>
+      <div class="thumb-actions">
+        <button class="icon-btn danger" data-action="delete-photo" data-id="${p.id}" title="Eliminar">✕</button>
+      </div>
+    </div>
+  `).join('') || '<p class="hint">Aún no hay fotos.</p>'}
+  `;
+}
+
+function adminGalerias(){
+  const gs = state.galleriesIndex || [];
+  return `
+  <div class="admin-h">Entregas privadas de sesión</div>
+  <h1 class="admin-title">Galerías de clientes</h1>
+
+  <div class="card">
+    <div class="admin-h" style="margin-bottom:14px;">Crear nueva galería</div>
+    <div class="row cols-2">
+      <div class="field"><label>Nombre de la sesión / cliente</label><input type="text" id="ng-name" placeholder="Ej. Boda Ana &amp; Luis"></div>
+      <div class="field"><label>Duración del enlace</label>
+        <select id="ng-duration">
+          <option value="3">3 meses</option>
+          <option value="6">6 meses</option>
+          <option value="12">1 año</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn-dark" data-action="create-gallery">Crear galería</button>
+  </div>
+
+  <div class="admin-h" style="margin-top:30px;">Galerías existentes</div>
+  <div id="galleries-list">Cargando…</div>
+  `;
+}
+
+function adminCuenta(){
+  return `
+  <div class="admin-h">Seguridad</div>
+  <h1 class="admin-title">Cuenta</h1>
+  <div class="card">
+    <div class="field"><label>Nueva contraseña de administrador</label>
+      <input type="password" id="f-newpass" placeholder="Escribe una contraseña nueva"></div>
+    <button class="btn-dark" data-action="change-pass">Actualizar contraseña</button>
+  </div>
+  <div class="card">
+    <div class="admin-h">Guardar y respaldar en Google Drive</div>
+    <p class="hint" style="margin-bottom:12px;">Este prototipo guarda todo en el almacenamiento del sitio. Para respaldo real de las fotos en Google Drive, sigue la guía de producción que te compartí aparte — ahí está el paso a paso para conectar tu cuenta.</p>
+  </div>
+  `;
+}
+
+/* ---------------------------- HELPERS ---------------------------- */
+function escapeHtml(str){
+  if(str===undefined || str===null) return '';
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function nl2br(str){ return escapeHtml(str).replace(/\n/g,'<br>'); }
+
+/* ---------------------------- EVENTS ---------------------------- */
+function bindEvents(){
+  const app = document.getElementById('app');
+  app.querySelectorAll('[data-action]').forEach(el=>{
+    el.addEventListener('click', onAction);
+  });
+  if(state.view==='admin' && state.adminTab==='galerias'){
+    loadGalleriesList();
+  }
+}
+
+async function onAction(e){
+  const action = e.currentTarget.dataset.action;
+  const d = e.currentTarget.dataset;
+
+  if(action==='go-admin'){ history.pushState({}, '', '?admin'); state.view='admin-login'; render(); }
+  if(action==='go-public'){ history.pushState({}, '', location.pathname); state.view='public'; render(); }
+  if(action==='logout'){ state.isAdmin=false; history.pushState({}, '', location.pathname); state.view='public'; render(); }
+
+  if(action==='filter'){ state.activeFilter = d.cat; render(); }
+  if(action==='open-lightbox'){ state.lightbox = parseInt(d.idx,10); render(); }
+  if(action==='open-gallery-lightbox'){ state.lightbox = parseInt(d.idx,10); render(); }
+  if(action==='close-lightbox' && e.target===e.currentTarget){ state.lightbox = null; render(); }
+
+  if(action==='try-login'){
+    const val = document.getElementById('admin-pass-input').value;
+    if(!STORAGE_AVAILABLE){
+      if(val === DEFAULT_PASSWORD){
+        state.isAdmin = true; state.view = 'admin'; state.saveMsg = ''; render();
+        setTimeout(()=>alert('Modo sin guardado: todavía no conectaste el backend de Google Sheets, así que los cambios que hagas aquí no se guardarán. Sigue la guía "Backend con Google Sheets" para activarlo.'), 200);
+      } else {
+        document.getElementById('login-error').innerHTML = '<div class="error-msg">Contraseña incorrecta. (Todavía no conectaste el backend de guardado, así que solo se acepta la contraseña por defecto: admin123)</div>';
+      }
+      return;
+    }
+    const saved = await STORAGE.get('site:admin-pass');
+    if(saved && val === saved.value){
+      state.isAdmin = true; state.view = 'admin'; render();
+    } else {
+      document.getElementById('login-error').innerHTML = '<div class="error-msg">Contraseña incorrecta.</div>';
+    }
+  }
+
+  if(action==='tab'){ state.adminTab = d.tab; render(); }
+
+  if(action==='save-contenido'){
+    const c = {
+      heroTitle: document.getElementById('f-heroTitle').value,
+      heroSubtitle: document.getElementById('f-heroSubtitle').value,
+      heroImage: document.getElementById('f-heroImage').value,
+      aboutTitle: document.getElementById('f-aboutTitle').value,
+      aboutText: document.getElementById('f-aboutText').value,
+      aboutImage: document.getElementById('f-aboutImage').value,
+      contactEmail: document.getElementById('f-contactEmail').value,
+      instagram: document.getElementById('f-instagram').value,
+      calendlyLink: document.getElementById('f-calendlyLink').value
+    };
+    state.content = c;
+    await STORAGE.set('site:content', c);
+    flashSave();
+  }
+
+  if(action==='set-font'){ state.design = {...state.design, font:d.key}; await STORAGE.set('site:design', state.design); applyDesign(state.design); render(); }
+  if(action==='set-color'){ state.design = {...state.design, color:d.key}; await STORAGE.set('site:design', state.design); applyDesign(state.design); render(); }
+
+  if(action==='add-photo'){
+    const url = document.getElementById('np-url').value.trim();
+    const category = document.getElementById('np-category').value.trim() || 'General';
+    const caption = document.getElementById('np-caption').value.trim();
+    const fileInput = document.getElementById('np-file');
+
+    let finalUrl = url ? normalizeImageUrl(url) : null;
+    if(!finalUrl && fileInput.files[0]){
+      finalUrl = await fileToCompressedDataUrl(fileInput.files[0]);
+    }
+    if(!finalUrl){ alert('Agrega una URL o selecciona un archivo.'); return; }
+
+    const newPhoto = { id: uid(), url: finalUrl, category, caption };
+    state.portfolio = [...state.portfolio, newPhoto];
+    await STORAGE.set('site:portfolio', state.portfolio);
+    render();
+  }
+
+  if(action==='delete-photo'){
+    state.portfolio = state.portfolio.filter(p=>p.id!==d.id);
+    await STORAGE.set('site:portfolio', state.portfolio);
+    render();
+  }
+
+  if(action==='create-gallery'){
+    const name = document.getElementById('ng-name').value.trim();
+    const months = parseInt(document.getElementById('ng-duration').value,10);
+    if(!name){ alert('Ponle un nombre a la galería.'); return; }
+    const id = uid();
+    const now = new Date();
+    const gallery = {
+      id, name,
+      createdAt: now.toISOString(),
+      expiresAt: addMonths(now, months).toISOString(),
+      durationMonths: months,
+      photos: []
+    };
+    await STORAGE.set('gallery:' + id, gallery);
+    const idx = (await STORAGE.get('galleries:index')) || [];
+    idx.push(id);
+    await STORAGE.set('galleries:index', idx);
+    document.getElementById('ng-name').value = '';
+    loadGalleriesList();
+  }
+
+  if(action==='change-pass'){
+    const val = document.getElementById('f-newpass').value;
+    if(!val || val.length<4){ alert('Usa al menos 4 caracteres.'); return; }
+    await STORAGE.set('site:admin-pass', { value: val });
+    document.getElementById('f-newpass').value='';
+    flashSave();
+  }
+}
+
+function flashSave(){
+  state.saveMsg = 'Guardado ✓';
+  render();
+  setTimeout(()=>{ state.saveMsg=''; const el=document.querySelector('.save-msg'); if(el) el.textContent=''; }, 2000);
+}
+
+async function fileToCompressedDataUrl(file){
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      const img = new Image();
+      img.onload = ()=>{
+        const maxW = 1400;
+        const scale = Math.min(1, maxW/img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width*scale; canvas.height = img.height*scale;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------------------------- GALERÍAS: lista en admin ---------------------------- */
+async function loadGalleriesList(){
+  const idx = (await STORAGE.get('galleries:index')) || [];
+  const container = document.getElementById('galleries-list');
+  if(!container) return;
+  if(!idx.length){ container.innerHTML = '<p class="hint">Aún no has creado ninguna galería.</p>'; return; }
+
+  const galleries = await Promise.all(idx.map(id=>STORAGE.get('gallery:'+id)));
+  const valid = galleries.filter(Boolean);
+
+  container.innerHTML = valid.map(g=>{
+    const expired = new Date(g.expiresAt) < new Date();
+    const daysLeft = Math.ceil((new Date(g.expiresAt)-new Date())/86400000);
+    const status = expired ? '<span class="status-pill expired">Expirada</span>' : (daysLeft<14 ? '<span class="status-pill warn">Vence pronto</span>' : '<span class="status-pill ok">Activa</span>');
+    const link = `${location.origin}${location.pathname}?g=${g.id}`;
+    return `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+        <div><strong>${escapeHtml(g.name)}</strong> ${status}</div>
+        <div class="hint" style="margin:0;">Creada ${fmtDate(g.createdAt)} · vence ${fmtDate(g.expiresAt)}</div>
+      </div>
+      <div class="gallery-link-box" style="margin-bottom:14px;">
+        <input type="text" readonly value="${link}" onclick="this.select()">
+        <button class="icon-btn" onclick="navigator.clipboard.writeText('${link}'); this.textContent='✓';">⧉</button>
+      </div>
+      <div class="field"><label>Agregar foto a esta galería (URL o Drive)</label>
+        <div class="row cols-2">
+          <input type="url" placeholder="https://... o enlace de Drive" id="gp-url-${g.id}">
+          <input type="text" placeholder="Descripción (opcional)" id="gp-cap-${g.id}">
+        </div>
+        <button class="btn-ghost" style="margin-top:8px;" onclick="window.__addGalleryPhoto('${g.id}')">Añadir foto</button>
+      </div>
+      ${g.photos.length ? `<div class="hint" style="margin-top:10px;">${g.photos.length} foto(s) en esta galería.</div>` : ''}
+      <div style="display:flex; gap:10px; margin-top:14px;">
+        <button class="btn-ghost" onclick="window.__extendGallery('${g.id}')">Extender 3 meses</button>
+        <button class="btn-ghost btn-danger" onclick="window.__deleteGallery('${g.id}')">Eliminar galería</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.__addGalleryPhoto = async function(id){
+  const urlInput = document.getElementById('gp-url-'+id);
+  const capInput = document.getElementById('gp-cap-'+id);
+  const url = normalizeImageUrl(urlInput.value.trim());
+  if(!url) { alert('Pega una URL de imagen.'); return; }
+  const g = await STORAGE.get('gallery:'+id);
+  g.photos.push({ url, caption: capInput.value.trim() });
+  await STORAGE.set('gallery:'+id, g);
+  loadGalleriesList();
+};
+window.__extendGallery = async function(id){
+  const g = await STORAGE.get('gallery:'+id);
+  g.expiresAt = addMonths(new Date(g.expiresAt), 3).toISOString();
+  await STORAGE.set('gallery:'+id, g);
+  loadGalleriesList();
+};
+window.__deleteGallery = async function(id){
+  if(!confirm('¿Eliminar esta galería? Esta acción no se puede deshacer.')) return;
+  await STORAGE.delete('gallery:'+id);
+  const idx = (await STORAGE.get('galleries:index')) || [];
+  await STORAGE.set('galleries:index', idx.filter(x=>x!==id));
+  loadGalleriesList();
+};
+
+/* init */
+loadInitial();
+</script>
+</body>
+</html>
