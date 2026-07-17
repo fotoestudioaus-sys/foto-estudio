@@ -311,24 +311,55 @@
 <script>
 /* =====================================================================
    ESTUDIO — prototipo de sitio fotográfico con panel admin y galerías
-   temporales para clientes. Todo el contenido vive en window.storage
-   (persistente entre sesiones). Este es un PROTOTIPO funcional para
-   probar diseño y flujo: no sustituye un backend real de producción.
+   temporales para clientes. Todo el contenido vive en una hoja de Google
+   Sheets conectada vía Google Apps Script (ver configuración abajo).
    ===================================================================== */
 
-const STORAGE_AVAILABLE = (typeof window.storage !== 'undefined');
+/* =====================================================================
+   CONFIGURACIÓN DE GUARDADO REAL (Google Sheets vía Apps Script)
+   -----------------------------------------------------------------
+   Pega aquí abajo, entre las comillas, la URL que te da Google Apps
+   Script al publicar el backend (termina en /exec).
+   Sigue la guía "guia-produccion.md" → sección "Backend con Google
+   Sheets" para crear esa URL paso a paso.
+   Mientras no la pegues, el sitio funciona en modo de solo lectura
+   con los textos y fotos por defecto, y el panel de administrador
+   te avisará que falta este paso.
+   ===================================================================== */
+const API_URL = 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT';
+
+const STORAGE_AVAILABLE = !!API_URL && !API_URL.includes('PEGA_AQUI');
 
 const STORAGE = {
   async get(key, shared=true){
-    try{ const r = await window.storage.get(key, shared); return r ? JSON.parse(r.value) : null; }
-    catch(e){ return null; }
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      const res = await fetch(`${API_URL}?action=get&key=${encodeURIComponent(key)}`);
+      const data = await res.json();
+      return (data && data.value !== null && data.value !== undefined && data.value !== '') ? JSON.parse(data.value) : null;
+    } catch(e){ console.error('Error leyendo', key, e); return null; }
   },
   async set(key, value, shared=true){
-    try{ return await window.storage.set(key, JSON.stringify(value), shared); }
-    catch(e){ console.error('Error guardando', key, e); return null; }
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      await fetch(API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'set', key, value: JSON.stringify(value) })
+      });
+      return true;
+    } catch(e){ console.error('Error guardando', key, e); return null; }
   },
   async delete(key, shared=true){
-    try{ return await window.storage.delete(key, shared); } catch(e){ return null; }
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      await fetch(API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'delete', key })
+      });
+      return true;
+    } catch(e){ return null; }
   }
 };
 
@@ -631,7 +662,7 @@ function renderLogin(){
         <label>Contraseña</label>
         <input type="password" id="admin-pass-input" placeholder="••••••••">
       </div>
-      ${!STORAGE_AVAILABLE ? '<p class="hint" style="color:#E2A233;">Estás viendo este archivo fuera de la conversación de Claude (por ejemplo, abierto directo en el navegador). En este modo solo funciona la contraseña por defecto y los cambios no se guardan.</p>' : ''}
+      ${!STORAGE_AVAILABLE ? '<p class="hint" style="color:#E2A233;">Aún no conectaste el backend de guardado (Google Sheets). Por ahora solo funciona la contraseña por defecto y ningún cambio se guardará. Sigue la guía "Backend con Google Sheets" para activarlo.</p>' : ''}
       <button class="btn-dark" data-action="try-login" style="width:100%;">Entrar</button>
       <div id="login-error"></div>
       <p class="hint" style="margin-top:18px;">Prototipo — contraseña por defecto: <span class="mono">admin123</span>. Cámbiala desde el panel una vez dentro.</p>
@@ -859,9 +890,9 @@ async function onAction(e){
     if(!STORAGE_AVAILABLE){
       if(val === DEFAULT_PASSWORD){
         state.isAdmin = true; state.view = 'admin'; state.saveMsg = ''; render();
-        setTimeout(()=>alert('Modo sin almacenamiento: estás viendo este archivo fuera de la conversación de Claude, así que los cambios que hagas aquí no se guardarán de forma permanente. Es normal para probar el diseño; para producción sigue la guía.'), 200);
+        setTimeout(()=>alert('Modo sin guardado: todavía no conectaste el backend de Google Sheets, así que los cambios que hagas aquí no se guardarán. Sigue la guía "Backend con Google Sheets" para activarlo.'), 200);
       } else {
-        document.getElementById('login-error').innerHTML = '<div class="error-msg">Contraseña incorrecta. (Este archivo está abierto fuera de la conversación de Claude, así que solo acepta la contraseña por defecto: admin123)</div>';
+        document.getElementById('login-error').innerHTML = '<div class="error-msg">Contraseña incorrecta. (Todavía no conectaste el backend de guardado, así que solo se acepta la contraseña por defecto: admin123)</div>';
       }
       return;
     }
