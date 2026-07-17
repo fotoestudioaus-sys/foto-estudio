@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Estudio Fotográfico — Portafolio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&family=Space+Mono:wght@400;700&family=Bitter:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,500&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&family=Work+Sans:wght@400;500&family=Space+Mono:wght@400&family=Bitter:ital,wght@0,600;1,400&display=swap" rel="stylesheet">
 <style>
   :root{
     /* ---- Fuentes: preset por defecto "Editorial Negativo" ---- */
@@ -303,6 +303,36 @@
   .expired-box .eyebrow{justify-content:center; display:flex; color:#E06B5A;}
   .expired-box h1{font-family:var(--f-display); font-size:28px;}
   .loading-box{min-height:60vh; display:flex; align-items:center; justify-content:center; font-family:var(--f-mono); color:var(--ink-soft);}
+
+  /* ---- editor de fotos / retoque (modal, estilo "cuarto oscuro") ---- */
+  .editor-overlay{
+    position:fixed; inset:0; background:rgba(6,7,8,.86); z-index:200;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+  }
+  .editor-panel{
+    background:#0F1113; color:#E7E6DF; width:100%; max-width:960px; max-height:90vh; overflow-y:auto;
+    border-radius:8px; border:1px solid #23262A; display:grid; grid-template-columns:1.1fr .9fr;
+  }
+  @media (max-width:760px){ .editor-panel{grid-template-columns:1fr;} }
+  .editor-preview{
+    background:#000; display:flex; align-items:center; justify-content:center; padding:20px; min-height:280px;
+  }
+  .editor-preview img{max-width:100%; max-height:60vh; object-fit:contain;}
+  .editor-form{padding:26px 28px;}
+  .editor-form h2{font-family:var(--f-display); font-size:20px; margin:0 0 18px; color:#fff;}
+  .editor-close{
+    position:absolute; top:18px; right:18px; background:none; border:none; color:#fff; font-size:22px; cursor:pointer;
+  }
+  .preset-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px;}
+  .preset-chip{
+    font-family:var(--f-mono); font-size:11px; text-transform:uppercase; letter-spacing:.04em;
+    padding:8px 12px; border-radius:16px; border:1px solid #3A3D41; background:#16181B; color:#E7E6DF; cursor:pointer;
+  }
+  .preset-chip:hover{border-color:var(--accent);}
+  .slider-row{margin-bottom:16px;}
+  .slider-row label{display:flex; justify-content:space-between; font-family:var(--f-mono); font-size:11px; text-transform:uppercase; color:#9C9C93; margin-bottom:6px;}
+  .slider-row input[type=range]{width:100%; accent-color:var(--accent);}
+
 </style>
 </head>
 <body>
@@ -326,7 +356,7 @@
    con los textos y fotos por defecto, y el panel de administrador
    te avisará que falta este paso.
    ===================================================================== */
-const API_URL = 'https://script.google.com/macros/s/AKfycbxUeXjG654dqeqpmjJU_NlwbU98D1BaqPxOhxi34YlfighKLSjVxAwelRlqTGinawDO/exec';
+const API_URL = 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT';
 
 const STORAGE_AVAILABLE = !!API_URL && !API_URL.includes('PEGA_AQUI');
 
@@ -373,6 +403,22 @@ const COLOR_PRESETS = {
   rojo:  { name:'Rojo luz de seguridad',  accent:'#C8432E', accent2:'#2C4A52' },
   cian:  { name:'Cian de negativo',       accent:'#2E8B8B', accent2:'#B5482E' }
 };
+
+/* ---- Retoque de fotos: ajustes y sugerencias de estilo (aplicados con filtro CSS, no destructivo) ---- */
+const DEFAULT_ADJUST = { brightness:100, contrast:100, saturate:100, sepia:0, grayscale:0 };
+const FILTER_PRESETS = {
+  original:     { name:'Original',           adjust:{ brightness:100, contrast:100, saturate:100, sepia:0,  grayscale:0 } },
+  bn:           { name:'Blanco y negro',     adjust:{ brightness:100, contrast:106, saturate:100, sepia:0,  grayscale:100 } },
+  bn_dramatico: { name:'B/N dramático',      adjust:{ brightness:94,  contrast:132, saturate:100, sepia:0,  grayscale:100 } },
+  sepia:        { name:'Sepia clásico',      adjust:{ brightness:105, contrast:105, saturate:100, sepia:70, grayscale:0 } },
+  calido:       { name:'Retrato cálido',     adjust:{ brightness:105, contrast:102, saturate:116, sepia:18, grayscale:0 } },
+  luminosa:     { name:'Boda luminosa',      adjust:{ brightness:112, contrast:97,  saturate:106, sepia:0,  grayscale:0 } },
+  limpio:       { name:'Producto limpio',    adjust:{ brightness:103, contrast:113, saturate:90,  sepia:0,  grayscale:0 } }
+};
+function cssFilterFor(photo){
+  const a = (photo && photo.adjust) ? photo.adjust : DEFAULT_ADJUST;
+  return `brightness(${a.brightness}%) contrast(${a.contrast}%) saturate(${a.saturate}%) sepia(${a.sepia}%) grayscale(${a.grayscale}%)`;
+}
 const DEFAULT_CONTENT = {
   heroTitle: 'Luz, encuadre\ny memoria.',
   heroSubtitle: 'Fotografía de retrato, boda, producto y evento. Cada sesión es una hoja de contactos hecha a la medida de quien la vive.',
@@ -405,8 +451,29 @@ let state = {
   lightbox: null,
   galleryId: null,
   galleryData: null,
-  saveMsg: ''
+  saveMsg: '',
+  galleries: null,        // caché en memoria de las galerías, para no re-descargarlas en cada clic
+  editingPhoto: null      // { scope:'portfolio'|'gallery', galleryId?, id, draft:{...} } — foto que se está editando/retocando
 };
+
+/* ---------------------------- SESIÓN DE ADMIN (persistente) ---------------------------- */
+const SESSION_KEY = 'estudiofoto_admin_session';
+const SESSION_DAYS = 7;
+function saveAdminSession(){
+  try{ localStorage.setItem(SESSION_KEY, JSON.stringify({ ok:true, expires: Date.now() + SESSION_DAYS*24*60*60*1000 })); }
+  catch(e){ /* si el navegador bloquea localStorage, simplemente no persiste entre recargas */ }
+}
+function hasValidAdminSession(){
+  try{
+    const raw = localStorage.getItem(SESSION_KEY);
+    if(!raw) return false;
+    const s = JSON.parse(raw);
+    return !!s.ok && s.expires > Date.now();
+  } catch(e){ return false; }
+}
+function clearAdminSession(){
+  try{ localStorage.removeItem(SESSION_KEY); } catch(e){}
+}
 
 function applyDesign(design){
   const f = FONT_PRESETS[design.font] || FONT_PRESETS.editorial;
@@ -470,7 +537,11 @@ async function loadInitial(){
     state.galleryData = await STORAGE.get('gallery:' + g);
     render();
   } else if(adminParam){
-    state.view = 'admin-login';
+    if(hasValidAdminSession()){
+      state.isAdmin = true; state.view = 'admin';
+    } else {
+      state.view = 'admin-login';
+    }
     render();
   } else {
     state.view = 'public';
@@ -540,7 +611,7 @@ function renderPublic(){
       <div class="contact-sheet">
         ${items.length ? items.map((p,i)=>`
           <div class="frame" data-action="open-lightbox" data-idx="${state.portfolio.indexOf(p)}">
-            <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy">
+            <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
             <div class="frame-num mono">N° ${String(i+1).padStart(2,'0')}</div>
             <div class="frame-cap">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
           </div>
@@ -596,7 +667,7 @@ function renderLightbox(){
   return `
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
-    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}">
+    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
   </div>`;
 }
@@ -631,7 +702,7 @@ function renderGallery(){
     <div class="gallery-grid">
       ${g.photos.map((p,i)=>`
         <div class="frame" data-action="open-gallery-lightbox" data-idx="${i}">
-          <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy">
+          <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
           <div class="frame-num mono">N° ${String(i+1).padStart(2,'0')}</div>
         </div>
       `).join('')}
@@ -646,7 +717,7 @@ function renderGalleryLightbox(){
   return `
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
-    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}">
+    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} · clic derecho → guardar imagen</div>
   </div>`;
 }
@@ -699,7 +770,9 @@ function renderAdmin(){
         ${state.adminTab==='cuenta' ? adminCuenta() : ''}
       </div>
     </div>
-  </div>`;
+  </div>
+  ${state.editingPhoto ? renderPhotoEditor() : ''}
+  `;
 }
 function tabBtn(key,label){
   return `<button class="${state.adminTab===key?'active':''}" data-action="tab" data-tab="${key}">${label}</button>`;
@@ -799,12 +872,13 @@ function adminPortafolio(){
   <div class="admin-h" style="margin-top:30px;">Fotos actuales (${items.length})</div>
   ${items.map((p)=>`
     <div class="thumb-row">
-      <img src="${p.url}" alt="">
+      <img src="${p.url}" alt="" style="filter:${cssFilterFor(p)}">
       <div class="thumb-meta">
         <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
         <div class="cat">${escapeHtml(p.category||'sin categoría')}</div>
       </div>
       <div class="thumb-actions">
+        <button class="icon-btn" data-action="edit-photo" data-scope="portfolio" data-id="${p.id}" title="Editar y retocar">✎</button>
         <button class="icon-btn danger" data-action="delete-photo" data-id="${p.id}" title="Eliminar">✕</button>
       </div>
     </div>
@@ -813,7 +887,6 @@ function adminPortafolio(){
 }
 
 function adminGalerias(){
-  const gs = state.galleriesIndex || [];
   return `
   <div class="admin-h">Entregas privadas de sesión</div>
   <h1 class="admin-title">Galerías de clientes</h1>
@@ -854,6 +927,133 @@ function adminCuenta(){
   `;
 }
 
+/* ---------------------------- EDITOR DE FOTOS / RETOQUE ---------------------------- */
+function renderPhotoEditor(){
+  const ep = state.editingPhoto;
+  const p = ep.draft;
+  const a = p.adjust;
+  return `
+  <div class="editor-overlay" data-action="close-editor">
+    <div class="editor-panel" onclick="event.stopPropagation()">
+      <div class="editor-preview">
+        <img id="editor-preview-img" src="${p.url}" alt="" style="filter:${cssFilterFor(p)}">
+      </div>
+      <div class="editor-form">
+        <button class="editor-close" data-action="close-editor">✕</button>
+        <h2>Editar foto</h2>
+
+        <div class="field"><label>URL de la imagen</label>
+          <input type="url" id="ep-url" value="${escapeHtml(p.url)}" oninput="window.__editorUpdateUrl(this.value)"></div>
+        ${ep.scope==='portfolio' ? `
+        <div class="field"><label>Categoría</label>
+          <input type="text" id="ep-category" value="${escapeHtml(p.category||'')}"></div>` : ''}
+        <div class="field"><label>Descripción</label>
+          <input type="text" id="ep-caption" value="${escapeHtml(p.caption||'')}"></div>
+
+        <div class="admin-h" style="margin:22px 0 10px;">Sugerencias de retoque</div>
+        <div class="preset-row">
+          ${Object.entries(FILTER_PRESETS).map(([key,fp])=>`<button type="button" class="preset-chip" onclick="window.__editorApplyPreset('${key}')">${fp.name}</button>`).join('')}
+        </div>
+
+        <div class="admin-h" style="margin:18px 0 10px;">Ajuste fino</div>
+        <div class="slider-row">
+          <label>Brillo <span id="ep-val-brightness">${a.brightness}%</span></label>
+          <input type="range" min="50" max="150" value="${a.brightness}" oninput="window.__editorSlide('brightness', this.value)">
+        </div>
+        <div class="slider-row">
+          <label>Contraste <span id="ep-val-contrast">${a.contrast}%</span></label>
+          <input type="range" min="50" max="150" value="${a.contrast}" oninput="window.__editorSlide('contrast', this.value)">
+        </div>
+        <div class="slider-row">
+          <label>Saturación <span id="ep-val-saturate">${a.saturate}%</span></label>
+          <input type="range" min="0" max="200" value="${a.saturate}" oninput="window.__editorSlide('saturate', this.value)">
+        </div>
+        <div class="slider-row">
+          <label>Sepia <span id="ep-val-sepia">${a.sepia}%</span></label>
+          <input type="range" min="0" max="100" value="${a.sepia}" oninput="window.__editorSlide('sepia', this.value)">
+        </div>
+        <div class="slider-row">
+          <label>Blanco y negro <span id="ep-val-grayscale">${a.grayscale}%</span></label>
+          <input type="range" min="0" max="100" value="${a.grayscale}" oninput="window.__editorSlide('grayscale', this.value)">
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top:22px;">
+          <button class="btn-dark" onclick="window.__editorSave()">Guardar cambios</button>
+          <button class="btn-ghost" data-action="close-editor">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function findPhotoForEdit(scope, id, galleryId){
+  if(scope==='portfolio') return state.portfolio.find(p=>p.id===id);
+  const g = (state.galleries||[]).find(g=>g.id===galleryId);
+  return g ? g.photos.find(p=>p.id===id) : null;
+}
+
+function openPhotoEditor(scope, id, galleryId){
+  const original = findPhotoForEdit(scope, id, galleryId);
+  if(!original) return;
+  state.editingPhoto = {
+    scope, galleryId,
+    draft: { ...original, adjust: { ...(original.adjust || DEFAULT_ADJUST) } }
+  };
+  render();
+}
+
+window.__editorUpdateUrl = function(val){
+  if(!state.editingPhoto) return;
+  state.editingPhoto.draft.url = val;
+  const img = document.getElementById('editor-preview-img');
+  if(img) img.src = val;
+};
+
+window.__editorSlide = function(field, val){
+  if(!state.editingPhoto) return;
+  const num = parseInt(val,10);
+  state.editingPhoto.draft.adjust[field] = num;
+  const img = document.getElementById('editor-preview-img');
+  if(img) img.style.filter = cssFilterFor(state.editingPhoto.draft);
+  const label = document.getElementById('ep-val-'+field);
+  if(label) label.textContent = num + '%';
+};
+
+window.__editorApplyPreset = function(key){
+  if(!state.editingPhoto) return;
+  const preset = FILTER_PRESETS[key];
+  if(!preset) return;
+  state.editingPhoto.draft.adjust = { ...preset.adjust };
+  render();
+};
+
+window.__editorSave = async function(){
+  const ep = state.editingPhoto;
+  if(!ep) return;
+  const url = document.getElementById('ep-url').value.trim();
+  const caption = document.getElementById('ep-caption').value.trim();
+  const categoryEl = document.getElementById('ep-category');
+  const category = categoryEl ? categoryEl.value.trim() : undefined;
+
+  const updated = { ...ep.draft, url: normalizeImageUrl(url) || url, caption };
+  if(category !== undefined) updated.category = category || 'General';
+
+  if(ep.scope === 'portfolio'){
+    state.portfolio = state.portfolio.map(p => p.id === updated.id ? updated : p);
+    state.editingPhoto = null;
+    render(); // optimista: se ve al instante
+    STORAGE.set('site:portfolio', state.portfolio); // se guarda en segundo plano
+  } else {
+    const g = (state.galleries||[]).find(g=>g.id===ep.galleryId);
+    if(g){
+      g.photos = g.photos.map(p => p.id === updated.id ? updated : p);
+    }
+    state.editingPhoto = null;
+    render();
+    if(g) STORAGE.set('gallery:'+g.id, g);
+  }
+};
+
 /* ---------------------------- HELPERS ---------------------------- */
 function escapeHtml(str){
   if(str===undefined || str===null) return '';
@@ -862,13 +1062,16 @@ function escapeHtml(str){
 function nl2br(str){ return escapeHtml(str).replace(/\n/g,'<br>'); }
 
 /* ---------------------------- EVENTS ---------------------------- */
-function bindEvents(){
-  const app = document.getElementById('app');
-  app.querySelectorAll('[data-action]').forEach(el=>{
+function bindActionListeners(root){
+  root.querySelectorAll('[data-action]').forEach(el=>{
     el.addEventListener('click', onAction);
   });
+}
+function bindEvents(){
+  const app = document.getElementById('app');
+  bindActionListeners(app);
   if(state.view==='admin' && state.adminTab==='galerias'){
-    loadGalleriesList();
+    ensureGalleriesLoaded();
   }
 }
 
@@ -876,20 +1079,28 @@ async function onAction(e){
   const action = e.currentTarget.dataset.action;
   const d = e.currentTarget.dataset;
 
-  if(action==='go-admin'){ history.pushState({}, '', '?admin'); state.view='admin-login'; render(); }
+  if(action==='go-admin'){
+    history.pushState({}, '', '?admin');
+    if(hasValidAdminSession()){ state.isAdmin = true; state.view = 'admin'; }
+    else { state.view = 'admin-login'; }
+    render();
+  }
   if(action==='go-public'){ history.pushState({}, '', location.pathname); state.view='public'; render(); }
-  if(action==='logout'){ state.isAdmin=false; history.pushState({}, '', location.pathname); state.view='public'; render(); }
+  if(action==='logout'){ state.isAdmin=false; clearAdminSession(); history.pushState({}, '', location.pathname); state.view='public'; render(); }
 
   if(action==='filter'){ state.activeFilter = d.cat; render(); }
   if(action==='open-lightbox'){ state.lightbox = parseInt(d.idx,10); render(); }
   if(action==='open-gallery-lightbox'){ state.lightbox = parseInt(d.idx,10); render(); }
   if(action==='close-lightbox' && e.target===e.currentTarget){ state.lightbox = null; render(); }
 
+  if(action==='edit-photo'){ openPhotoEditor(d.scope, d.id, d.galleryId); }
+  if(action==='close-editor' && e.target===e.currentTarget){ state.editingPhoto = null; render(); }
+
   if(action==='try-login'){
     const val = document.getElementById('admin-pass-input').value;
     if(!STORAGE_AVAILABLE){
       if(val === DEFAULT_PASSWORD){
-        state.isAdmin = true; state.view = 'admin'; state.saveMsg = ''; render();
+        state.isAdmin = true; state.view = 'admin'; state.saveMsg = ''; saveAdminSession(); render();
         setTimeout(()=>alert('Modo sin guardado: todavía no conectaste el backend de Google Sheets, así que los cambios que hagas aquí no se guardarán. Sigue la guía "Backend con Google Sheets" para activarlo.'), 200);
       } else {
         document.getElementById('login-error').innerHTML = '<div class="error-msg">Contraseña incorrecta. (Todavía no conectaste el backend de guardado, así que solo se acepta la contraseña por defecto: admin123)</div>';
@@ -898,7 +1109,7 @@ async function onAction(e){
     }
     const saved = await STORAGE.get('site:admin-pass');
     if(saved && val === saved.value){
-      state.isAdmin = true; state.view = 'admin'; render();
+      state.isAdmin = true; state.view = 'admin'; saveAdminSession(); render();
     } else {
       document.getElementById('login-error').innerHTML = '<div class="error-msg">Contraseña incorrecta.</div>';
     }
@@ -919,12 +1130,18 @@ async function onAction(e){
       calendlyLink: document.getElementById('f-calendlyLink').value
     };
     state.content = c;
-    await STORAGE.set('site:content', c);
-    flashSave();
+    flashSave(); // se ve "Guardado" al instante
+    STORAGE.set('site:content', c); // se guarda en segundo plano, sin bloquear la interfaz
   }
 
-  if(action==='set-font'){ state.design = {...state.design, font:d.key}; await STORAGE.set('site:design', state.design); applyDesign(state.design); render(); }
-  if(action==='set-color'){ state.design = {...state.design, color:d.key}; await STORAGE.set('site:design', state.design); applyDesign(state.design); render(); }
+  if(action==='set-font'){
+    state.design = {...state.design, font:d.key}; applyDesign(state.design); render();
+    STORAGE.set('site:design', state.design);
+  }
+  if(action==='set-color'){
+    state.design = {...state.design, color:d.key}; applyDesign(state.design); render();
+    STORAGE.set('site:design', state.design);
+  }
 
   if(action==='add-photo'){
     const url = document.getElementById('np-url').value.trim();
@@ -934,20 +1151,20 @@ async function onAction(e){
 
     let finalUrl = url ? normalizeImageUrl(url) : null;
     if(!finalUrl && fileInput.files[0]){
-      finalUrl = await fileToCompressedDataUrl(fileInput.files[0]);
+      finalUrl = await fileToCompressedDataUrl(fileInput.files[0]); // esto sí necesita esperar (leer el archivo)
     }
     if(!finalUrl){ alert('Agrega una URL o selecciona un archivo.'); return; }
 
-    const newPhoto = { id: uid(), url: finalUrl, category, caption };
+    const newPhoto = { id: uid(), url: finalUrl, category, caption, adjust: {...DEFAULT_ADJUST} };
     state.portfolio = [...state.portfolio, newPhoto];
-    await STORAGE.set('site:portfolio', state.portfolio);
-    render();
+    render(); // se ve al instante en la lista
+    STORAGE.set('site:portfolio', state.portfolio); // se guarda en segundo plano
   }
 
   if(action==='delete-photo'){
     state.portfolio = state.portfolio.filter(p=>p.id!==d.id);
-    await STORAGE.set('site:portfolio', state.portfolio);
     render();
+    STORAGE.set('site:portfolio', state.portfolio);
   }
 
   if(action==='create-gallery'){
@@ -963,13 +1180,17 @@ async function onAction(e){
       durationMonths: months,
       photos: []
     };
-    await STORAGE.set('gallery:' + id, gallery);
-    const idx = (await STORAGE.get('galleries:index')) || [];
-    idx.push(id);
-    await STORAGE.set('galleries:index', idx);
+    state.galleries = [...(state.galleries||[]), gallery]; // caché local: no hace falta re-descargar todo
     document.getElementById('ng-name').value = '';
-    loadGalleriesList();
+    renderGalleriesList(); // se ve al instante
+    (async ()=>{
+      await STORAGE.set('gallery:' + id, gallery);
+      const idx = (await STORAGE.get('galleries:index')) || [];
+      idx.push(id);
+      await STORAGE.set('galleries:index', idx);
+    })();
   }
+
 
   if(action==='change-pass'){
     const val = document.getElementById('f-newpass').value;
@@ -1008,17 +1229,35 @@ async function fileToCompressedDataUrl(file){
   });
 }
 
-/* ---------------------------- GALERÍAS: lista en admin ---------------------------- */
-async function loadGalleriesList(){
+/* ---------------------------- GALERÍAS: lista en admin (con caché local) ---------------------------- */
+async function ensureGalleriesLoaded(){
+  if(state.galleries !== null){ renderGalleriesList(); return; } // ya está en caché: solo se vuelve a pintar, sin red
+  const container = document.getElementById('galleries-list');
+  if(container) container.innerHTML = 'Cargando…';
   const idx = (await STORAGE.get('galleries:index')) || [];
+  if(!idx.length){ state.galleries = []; renderGalleriesList(); return; }
+  const galleries = await Promise.all(idx.map(id=>STORAGE.get('gallery:'+id)));
+  state.galleries = galleries.filter(Boolean);
+  let neededBackfill = false;
+  state.galleries.forEach(g=>{
+    g.photos.forEach(p=>{
+      if(!p.id){ p.id = uid(); neededBackfill = true; }
+      if(!p.adjust){ p.adjust = {...DEFAULT_ADJUST}; neededBackfill = true; }
+    });
+  });
+  if(neededBackfill){
+    state.galleries.forEach(g=> STORAGE.set('gallery:'+g.id, g)); // guarda en segundo plano, sin bloquear
+  }
+  renderGalleriesList();
+}
+
+function renderGalleriesList(){
   const container = document.getElementById('galleries-list');
   if(!container) return;
-  if(!idx.length){ container.innerHTML = '<p class="hint">Aún no has creado ninguna galería.</p>'; return; }
+  const list = state.galleries || [];
+  if(!list.length){ container.innerHTML = '<p class="hint">Aún no has creado ninguna galería.</p>'; return; }
 
-  const galleries = await Promise.all(idx.map(id=>STORAGE.get('gallery:'+id)));
-  const valid = galleries.filter(Boolean);
-
-  container.innerHTML = valid.map(g=>{
+  container.innerHTML = list.map(g=>{
     const expired = new Date(g.expiresAt) < new Date();
     const daysLeft = Math.ceil((new Date(g.expiresAt)-new Date())/86400000);
     const status = expired ? '<span class="status-pill expired">Expirada</span>' : (daysLeft<14 ? '<span class="status-pill warn">Vence pronto</span>' : '<span class="status-pill ok">Activa</span>');
@@ -1033,6 +1272,23 @@ async function loadGalleriesList(){
         <input type="text" readonly value="${link}" onclick="this.select()">
         <button class="icon-btn" onclick="navigator.clipboard.writeText('${link}'); this.textContent='✓';">⧉</button>
       </div>
+
+      ${g.photos.length ? `
+      <div style="margin-bottom:14px;">
+        ${g.photos.map(p=>`
+          <div class="thumb-row">
+            <img src="${p.url}" alt="" style="filter:${cssFilterFor(p)}">
+            <div class="thumb-meta">
+              <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
+            </div>
+            <div class="thumb-actions">
+              <button class="icon-btn" data-action="edit-photo" data-scope="gallery" data-gallery-id="${g.id}" data-id="${p.id}" title="Editar y retocar">✎</button>
+              <button class="icon-btn danger" onclick="window.__deleteGalleryPhoto('${g.id}','${p.id}')" title="Eliminar">✕</button>
+            </div>
+          </div>
+        `).join('')}
+      </div>` : '<p class="hint" style="margin-bottom:14px;">Esta galería todavía no tiene fotos.</p>'}
+
       <div class="field"><label>Agregar foto a esta galería (URL o Drive)</label>
         <div class="row cols-2">
           <input type="url" placeholder="https://... o enlace de Drive" id="gp-url-${g.id}">
@@ -1040,37 +1296,49 @@ async function loadGalleriesList(){
         </div>
         <button class="btn-ghost" style="margin-top:8px;" onclick="window.__addGalleryPhoto('${g.id}')">Añadir foto</button>
       </div>
-      ${g.photos.length ? `<div class="hint" style="margin-top:10px;">${g.photos.length} foto(s) en esta galería.</div>` : ''}
       <div style="display:flex; gap:10px; margin-top:14px;">
         <button class="btn-ghost" onclick="window.__extendGallery('${g.id}')">Extender 3 meses</button>
         <button class="btn-ghost btn-danger" onclick="window.__deleteGallery('${g.id}')">Eliminar galería</button>
       </div>
     </div>`;
   }).join('');
+  bindActionListeners(container); // vuelve a enlazar los botones "editar" que se acaban de dibujar
 }
 
-window.__addGalleryPhoto = async function(id){
+window.__addGalleryPhoto = function(id){
   const urlInput = document.getElementById('gp-url-'+id);
   const capInput = document.getElementById('gp-cap-'+id);
   const url = normalizeImageUrl(urlInput.value.trim());
   if(!url) { alert('Pega una URL de imagen.'); return; }
-  const g = await STORAGE.get('gallery:'+id);
-  g.photos.push({ url, caption: capInput.value.trim() });
-  await STORAGE.set('gallery:'+id, g);
-  loadGalleriesList();
+  const g = state.galleries.find(g=>g.id===id);
+  if(!g) return;
+  g.photos.push({ id: uid(), url, caption: capInput.value.trim(), adjust: {...DEFAULT_ADJUST} });
+  renderGalleriesList(); // al instante
+  STORAGE.set('gallery:'+id, g); // en segundo plano
 };
-window.__extendGallery = async function(id){
-  const g = await STORAGE.get('gallery:'+id);
+window.__deleteGalleryPhoto = function(galleryId, photoId){
+  const g = state.galleries.find(g=>g.id===galleryId);
+  if(!g) return;
+  g.photos = g.photos.filter(p=>p.id!==photoId);
+  renderGalleriesList();
+  STORAGE.set('gallery:'+galleryId, g);
+};
+window.__extendGallery = function(id){
+  const g = state.galleries.find(g=>g.id===id);
+  if(!g) return;
   g.expiresAt = addMonths(new Date(g.expiresAt), 3).toISOString();
-  await STORAGE.set('gallery:'+id, g);
-  loadGalleriesList();
+  renderGalleriesList();
+  STORAGE.set('gallery:'+id, g);
 };
-window.__deleteGallery = async function(id){
+window.__deleteGallery = function(id){
   if(!confirm('¿Eliminar esta galería? Esta acción no se puede deshacer.')) return;
-  await STORAGE.delete('gallery:'+id);
-  const idx = (await STORAGE.get('galleries:index')) || [];
-  await STORAGE.set('galleries:index', idx.filter(x=>x!==id));
-  loadGalleriesList();
+  state.galleries = state.galleries.filter(g=>g.id!==id);
+  renderGalleriesList();
+  (async ()=>{
+    await STORAGE.delete('gallery:'+id);
+    const idx = (await STORAGE.get('galleries:index')) || [];
+    await STORAGE.set('galleries:index', idx.filter(x=>x!==id));
+  })();
 };
 
 /* init */
