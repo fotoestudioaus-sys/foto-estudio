@@ -6,6 +6,7 @@
 <title>Estudio Fotográfico — Portafolio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,500&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&family=Work+Sans:wght@400;500&family=Space+Mono:wght@400&family=Bitter:ital,wght@0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     /* ---- Fuentes: preset por defecto "Editorial Negativo" ---- */
@@ -360,6 +361,21 @@ const API_URL = 'PEGA_AQUI_TU_URL_DE_APPS_SCRIPT';
 
 const STORAGE_AVAILABLE = !!API_URL && !API_URL.includes('PEGA_AQUI');
 
+/* =====================================================================
+   CONFIGURACIÓN DE SUBIDA DIRECTA A GOOGLE DRIVE (Camino 3)
+   -----------------------------------------------------------------
+   Pega aquí tu "Client ID" de OAuth de Google Cloud Console (termina
+   en .apps.googleusercontent.com). Sigue la guía "camino3-google-drive.md"
+   paso a paso para crearlo — no requiere programar, solo configurar
+   tu propio proyecto de Google Cloud.
+   Mientras no lo pegues, el botón "Conectar con Google Drive" del
+   panel te lo indicará y las fotos seguirán subiéndose como hasta
+   ahora (comprimidas en el sitio, o por liga manual).
+   ===================================================================== */
+const DRIVE_CLIENT_ID = '338085803736-0m2d8bttsosr638ca6fktlcqg327535d.apps.googleusercontent.com';
+const DRIVE_ENABLED = !!DRIVE_CLIENT_ID && !DRIVE_CLIENT_ID.includes('PEGA_AQUI');
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'; // solo archivos que este sitio crea, no todo tu Drive
+
 const STORAGE = {
   async get(key, shared=true){
     if(!STORAGE_AVAILABLE) return null;
@@ -453,7 +469,8 @@ let state = {
   galleryData: null,
   saveMsg: '',
   galleries: null,        // caché en memoria de las galerías, para no re-descargarlas en cada clic
-  editingPhoto: null      // { scope:'portfolio'|'gallery', galleryId?, id, draft:{...} } — foto que se está editando/retocando
+  editingPhoto: null,     // { scope:'portfolio'|'gallery', galleryId?, id, draft:{...} } — foto que se está editando/retocando
+  driveToken: null        // token de acceso a Google Drive del usuario (Camino 3); vive solo en memoria, no se guarda
 };
 
 /* ---------------------------- SESIÓN DE ADMIN (persistente) ---------------------------- */
@@ -497,7 +514,10 @@ function normalizeImageUrl(url){
   if(!url) return url;
   if(url.includes('drive.google.com')){
     const id = fileIdFromDriveUrl(url);
-    if(id) return `https://drive.google.com/uc?export=view&id=${id}`;
+    // Google desactivó el formato antiguo "uc?export=view" (ahora da error 403).
+    // El formato "thumbnail" con tamaño grande es el que sigue funcionando en 2026,
+    // aunque Google puede limitar la velocidad si hay muchas fotos en la misma página.
+    if(id) return `https://drive.google.com/thumbnail?id=${id}&sz=w2000`;
   }
   return url;
 }
@@ -512,6 +532,49 @@ function fmtDate(iso){
   return d.toLocaleDateString('es-MX', { year:'numeric', month:'short', day:'numeric' });
 }
 function uid(){ return Math.random().toString(36).slice(2,9); }
+
+/* Vista previa en vivo: detecta si una URL de foto realmente carga antes de guardarla.
+   Se usa en los formularios de "agregar foto" (portafolio y galerías). */
+window.__previewUrl = function(inputId, previewId){
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById(previewId);
+  if(!input || !preview) return;
+  const raw = input.value.trim();
+  if(!raw){ preview.innerHTML = ''; return; }
+  const url = normalizeImageUrl(raw);
+  preview.innerHTML = `<p class="hint">Verificando…</p>`;
+  const testImg = new Image();
+  testImg.onload = function(){
+    preview.innerHTML = `<img src="${url}" style="max-width:160px; max-height:160px; border-radius:4px; display:block;"><p class="hint" style="color:#7FBF8A;">Se ve bien ✓</p>`;
+  };
+  testImg.onerror = function(){
+    const isDrive = raw.includes('drive.google.com');
+    preview.innerHTML = `<p class="hint" style="color:#E06B5A;">Esta liga no cargó. ${isDrive ? 'Revisa que el archivo esté compartido como "Cualquier persona con el enlace" y que sea una foto individual, no una carpeta. Google a veces bloquea estas ligas de forma intermitente — si insiste, usa Cloudinary (ver guía de producción, Camino 2).' : 'Revisa que la URL apunte directo a una imagen.'}</p>`;
+  };
+  testImg.src = url;
+};
+
+/* Igual que __previewUrl pero para varias ligas a la vez (una por línea), para subida masiva. */
+window.__previewMultiUrl = function(textareaId, previewId){
+  const textarea = document.getElementById(textareaId);
+  const preview = document.getElementById(previewId);
+  if(!textarea || !preview) return;
+  const lines = textarea.value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ preview.innerHTML = ''; return; }
+  preview.innerHTML = lines.map((raw,i)=>`<div id="mp-slot-${i}" style="width:90px;"><div style="width:90px; height:90px; background:#16181B; border-radius:4px; display:flex; align-items:center; justify-content:center; font-family:var(--f-mono); font-size:10px; color:#9C9C93;">…</div></div>`).join('');
+  lines.forEach((raw,i)=>{
+    const url = normalizeImageUrl(raw);
+    const testImg = new Image();
+    const slot = document.getElementById('mp-slot-'+i);
+    testImg.onload = function(){
+      if(slot) slot.innerHTML = `<img src="${url}" style="width:90px; height:90px; object-fit:cover; border-radius:4px; display:block;"><div class="hint" style="color:#7FBF8A; text-align:center;">✓</div>`;
+    };
+    testImg.onerror = function(){
+      if(slot) slot.innerHTML = `<div style="width:90px; height:90px; background:#2a1512; border-radius:4px; display:flex; align-items:center; justify-content:center; color:#E06B5A; font-size:20px;">✕</div><div class="hint" style="color:#E06B5A; text-align:center;">Liga ${i+1} falló</div>`;
+    };
+    testImg.src = url;
+  });
+};
 
 async function loadInitial(){
   const params = new URLSearchParams(window.location.search);
@@ -611,7 +674,7 @@ function renderPublic(){
       <div class="contact-sheet">
         ${items.length ? items.map((p,i)=>`
           <div class="frame" data-action="open-lightbox" data-idx="${state.portfolio.indexOf(p)}">
-            <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
+            <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
             <div class="frame-num mono">N° ${String(i+1).padStart(2,'0')}</div>
             <div class="frame-cap">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
           </div>
@@ -667,7 +730,7 @@ function renderLightbox(){
   return `
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
-    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
+    <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
   </div>`;
 }
@@ -702,7 +765,7 @@ function renderGallery(){
     <div class="gallery-grid">
       ${g.photos.map((p,i)=>`
         <div class="frame" data-action="open-gallery-lightbox" data-idx="${i}">
-          <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
+          <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
           <div class="frame-num mono">N° ${String(i+1).padStart(2,'0')}</div>
         </div>
       `).join('')}
@@ -717,7 +780,7 @@ function renderGalleryLightbox(){
   return `
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
-    <img src="${p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
+    <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} · clic derecho → guardar imagen</div>
   </div>`;
 }
@@ -750,6 +813,10 @@ function renderAdmin(){
       <div class="brand">Estudio<span class="dot">·</span>Foto — Panel</div>
       <div class="admin-actions">
         <span class="save-msg mono">${state.saveMsg}</span>
+        ${driveConnected()
+          ? `<span class="status-pill ok" title="Conectado a Google Drive">Drive ✓</span><button class="btn" onclick="window.__disconnectDrive()">Desconectar Drive</button>`
+          : `<button class="btn" onclick="window.__connectDrive()">${DRIVE_ENABLED ? 'Conectar Google Drive' : 'Conectar Google Drive (falta configurar)'}</button>`
+        }
         <button class="btn" data-action="go-public">Ver sitio público</button>
         <button class="btn" data-action="logout">Cerrar sesión</button>
       </div>
@@ -855,16 +922,22 @@ function adminPortafolio(){
   <h1 class="admin-title">Portafolio</h1>
 
   <div class="card">
-    <div class="admin-h" style="margin-bottom:14px;">Agregar foto</div>
-    <div class="row cols-2">
-      <div class="field"><label>URL de la imagen</label><input type="url" id="np-url" placeholder="https://... o enlace de Google Drive"></div>
-      <div class="field"><label>Categoría</label><input type="text" id="np-category" placeholder="Retrato, Boda, Producto…"></div>
-    </div>
-    <div class="field"><label>Descripción corta</label><input type="text" id="np-caption" placeholder="Ej. Sesión exterior, luz de tarde"></div>
+    <div class="admin-h" style="margin-bottom:14px;">Agregar fotos (una o varias a la vez)</div>
+    <div class="field"><label>Categoría (se aplica a todas las fotos que agregues aquí)</label>
+      <input type="text" id="np-category" placeholder="Retrato, Boda, Producto…"></div>
+
+    <div class="field"><label>Ligas de imágenes — una por línea (URL directa o de Google Drive)</label>
+      <textarea id="np-urls" style="min-height:110px;" placeholder="https://drive.google.com/file/d/.../view
+https://drive.google.com/file/d/.../view
+https://otra-liga.com/foto.jpg" oninput="window.__previewMultiUrl('np-urls','np-preview')"></textarea></div>
+    <div id="np-preview" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px;"></div>
+
     <div class="field">
-      <label>O sube un archivo desde tu equipo</label>
-      <input type="file" id="np-file" accept="image/*">
-      <p class="hint">Se comprime automáticamente para el prototipo. Para fotos en alta resolución reales, usa una URL (recomendado: enlace de Google Drive).</p>
+      <label>O sube varios archivos desde tu equipo (selecciona varios con Ctrl/Cmd, o arrastra)</label>
+      <input type="file" id="np-file" accept="image/*" multiple>
+      <p class="hint">${driveConnected()
+        ? 'Conectado a Google Drive ✓ — estos archivos se subirán directo a tu carpeta "EstudioFoto / Portafolio" en Drive, en alta resolución, y se compartirán automáticamente.'
+        : 'Se comprimen automáticamente y quedan guardados dentro del sitio — útil para probar rápido. Conecta Google Drive (botón arriba) para subir en alta resolución de verdad.'}</p>
     </div>
     <button class="btn-dark" data-action="add-photo">Añadir al portafolio</button>
   </div>
@@ -872,12 +945,13 @@ function adminPortafolio(){
   <div class="admin-h" style="margin-top:30px;">Fotos actuales (${items.length})</div>
   ${items.map((p)=>`
     <div class="thumb-row">
-      <img src="${p.url}" alt="" style="filter:${cssFilterFor(p)}">
+      <img src="${normalizeImageUrl(p.url) || p.url}" alt="" style="filter:${cssFilterFor(p)}">
       <div class="thumb-meta">
         <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
         <div class="cat">${escapeHtml(p.category||'sin categoría')}</div>
       </div>
       <div class="thumb-actions">
+        <a class="icon-btn" href="${normalizeImageUrl(p.url) || p.url}" download target="_blank" rel="noopener" title="Descargar / abrir">⭳</a>
         <button class="icon-btn" data-action="edit-photo" data-scope="portfolio" data-id="${p.id}" title="Editar y retocar">✎</button>
         <button class="icon-btn danger" data-action="delete-photo" data-id="${p.id}" title="Eliminar">✕</button>
       </div>
@@ -936,7 +1010,7 @@ function renderPhotoEditor(){
   <div class="editor-overlay" data-action="close-editor">
     <div class="editor-panel" onclick="event.stopPropagation()">
       <div class="editor-preview">
-        <img id="editor-preview-img" src="${p.url}" alt="" style="filter:${cssFilterFor(p)}">
+        <img id="editor-preview-img" src="${normalizeImageUrl(p.url) || p.url}" alt="" style="filter:${cssFilterFor(p)}" onerror="window.__editorImgError()" onload="window.__editorImgOk()">
       </div>
       <div class="editor-form">
         <button class="editor-close" data-action="close-editor">✕</button>
@@ -944,6 +1018,7 @@ function renderPhotoEditor(){
 
         <div class="field"><label>URL de la imagen</label>
           <input type="url" id="ep-url" value="${escapeHtml(p.url)}" oninput="window.__editorUpdateUrl(this.value)"></div>
+        <div id="ep-url-status"></div>
         ${ep.scope==='portfolio' ? `
         <div class="field"><label>Categoría</label>
           <input type="text" id="ep-category" value="${escapeHtml(p.category||'')}"></div>` : ''}
@@ -1006,7 +1081,17 @@ window.__editorUpdateUrl = function(val){
   if(!state.editingPhoto) return;
   state.editingPhoto.draft.url = val;
   const img = document.getElementById('editor-preview-img');
-  if(img) img.src = val;
+  const status = document.getElementById('ep-url-status');
+  if(status) status.innerHTML = '';
+  if(img) img.src = normalizeImageUrl(val) || val;
+};
+window.__editorImgError = function(){
+  const status = document.getElementById('ep-url-status');
+  if(status) status.innerHTML = '<p class="hint" style="color:#E06B5A;">Esta liga no está cargando. Si es de Google Drive, confirma que el archivo (no la carpeta) esté compartido como "Cualquier persona con el enlace". Si guardas así, la foto se verá rota en el sitio.</p>';
+};
+window.__editorImgOk = function(){
+  const status = document.getElementById('ep-url-status');
+  if(status) status.innerHTML = '';
 };
 
 window.__editorSlide = function(field, val){
@@ -1144,21 +1229,25 @@ async function onAction(e){
   }
 
   if(action==='add-photo'){
-    const url = document.getElementById('np-url').value.trim();
     const category = document.getElementById('np-category').value.trim() || 'General';
-    const caption = document.getElementById('np-caption').value.trim();
+    const urlsRaw = document.getElementById('np-urls').value.split('\n').map(l=>l.trim()).filter(Boolean);
     const fileInput = document.getElementById('np-file');
+    const files = Array.from(fileInput.files || []);
 
-    let finalUrl = url ? normalizeImageUrl(url) : null;
-    if(!finalUrl && fileInput.files[0]){
-      finalUrl = await fileToCompressedDataUrl(fileInput.files[0]); // esto sí necesita esperar (leer el archivo)
+    if(!urlsRaw.length && !files.length){ alert('Pega al menos una liga o selecciona al menos un archivo.'); return; }
+
+    const newPhotos = [];
+    for(const raw of urlsRaw){
+      newPhotos.push({ id: uid(), url: normalizeImageUrl(raw), category, caption: '', adjust: {...DEFAULT_ADJUST} });
     }
-    if(!finalUrl){ alert('Agrega una URL o selecciona un archivo.'); return; }
+    for(const file of files){
+      const finalUrl = await smartUploadFile(file, ['EstudioFoto', 'Portafolio']); // se procesan una por una
+      newPhotos.push({ id: uid(), url: finalUrl, category, caption: '', adjust: {...DEFAULT_ADJUST} });
+    }
 
-    const newPhoto = { id: uid(), url: finalUrl, category, caption, adjust: {...DEFAULT_ADJUST} };
-    state.portfolio = [...state.portfolio, newPhoto];
-    render(); // se ve al instante en la lista
-    STORAGE.set('site:portfolio', state.portfolio); // se guarda en segundo plano
+    state.portfolio = [...state.portfolio, ...newPhotos];
+    render(); // se ven al instante en la lista, todas juntas
+    STORAGE.set('site:portfolio', state.portfolio); // se guardan en segundo plano
   }
 
   if(action==='delete-photo'){
@@ -1229,6 +1318,126 @@ async function fileToCompressedDataUrl(file){
   });
 }
 
+/* =====================================================================
+   MÓDULO GOOGLE DRIVE (Camino 3) — conexión, carpetas y subida directa
+   ===================================================================== */
+let driveTokenClient = null;
+
+function driveConnected(){ return !!state.driveToken; }
+
+window.__connectDrive = function(){
+  if(!DRIVE_ENABLED){
+    alert('Todavía no configuraste tu Client ID de Google Drive. Sigue la guía "camino3-google-drive.md", sección "Paso 3", y pégalo en la línea DRIVE_CLIENT_ID del archivo.');
+    return;
+  }
+  if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2){
+    alert('Google todavía está cargando, espera un segundo y vuelve a intentar.');
+    return;
+  }
+  if(!driveTokenClient){
+    driveTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: DRIVE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: (resp)=>{
+        if(resp && resp.access_token){
+          state.driveToken = resp.access_token;
+          render();
+        } else {
+          alert('No se pudo conectar con Google Drive. Intenta de nuevo.');
+        }
+      }
+    });
+  }
+  driveTokenClient.requestAccessToken();
+};
+
+window.__disconnectDrive = function(){
+  if(state.driveToken && typeof google !== 'undefined' && google.accounts){
+    google.accounts.oauth2.revoke(state.driveToken, ()=>{});
+  }
+  state.driveToken = null;
+  render();
+};
+
+/* Busca (o crea) una carpeta de Drive con ese nombre dentro de un padre dado */
+async function getOrCreateDriveFolder(name, parentId){
+  const safeName = name.replace(/'/g, "\\'");
+  let q = `name='${safeName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  if(parentId) q += ` and '${parentId}' in parents`;
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`, {
+    headers: { Authorization: 'Bearer ' + state.driveToken }
+  });
+  const data = await res.json();
+  if(data.files && data.files.length) return data.files[0].id;
+
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: parentId ? [parentId] : undefined })
+  });
+  const created = await createRes.json();
+  if(!created.id) throw new Error('No se pudo crear la carpeta "' + name + '" en Drive.');
+  return created.id;
+}
+
+/* Crea (o encuentra) una ruta de carpetas anidadas, ej. ['EstudioFoto','Portafolio'] */
+async function ensureDriveFolderPath(names){
+  let parentId = null;
+  for(const name of names){
+    parentId = await getOrCreateDriveFolder(name, parentId);
+  }
+  return parentId;
+}
+
+/* Sube un archivo a una carpeta de Drive, lo hace visible por liga, y regresa su URL para mostrar */
+async function uploadFileToDriveFolder(file, folderId){
+  const base64Data = await new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const boundary = 'estudiofoto-' + uid();
+  const metadata = { name: file.name, parents: [folderId] };
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: ${file.type || 'image/jpeg'}\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Data}\r\n` +
+    `--${boundary}--`;
+
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body
+  });
+  const created = await res.json();
+  if(!created.id) throw new Error('Drive no aceptó el archivo "' + file.name + '".');
+
+  // Hacerlo visible por liga (solo lectura), igual que "Cualquier persona con el enlace"
+  await fetch(`https://www.googleapis.com/drive/v3/files/${created.id}/permissions`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  });
+
+  return `https://drive.google.com/thumbnail?id=${created.id}&sz=w2000`;
+}
+
+/* Sube un archivo usando Drive si está conectado; si no, cae de vuelta al modo local comprimido */
+async function smartUploadFile(file, folderPathNames){
+  if(driveConnected()){
+    try{
+      const folderId = await ensureDriveFolderPath(folderPathNames);
+      return await uploadFileToDriveFolder(file, folderId);
+    } catch(e){
+      console.error('Error subiendo a Drive, se usa modo local:', e);
+      alert('No se pudo subir "' + file.name + '" a Google Drive (revisa tu conexión o vuelve a conectar). Se guardó en modo local en su lugar.');
+      return await fileToCompressedDataUrl(file);
+    }
+  }
+  return await fileToCompressedDataUrl(file);
+}
+
 /* ---------------------------- GALERÍAS: lista en admin (con caché local) ---------------------------- */
 async function ensureGalleriesLoaded(){
   if(state.galleries !== null){ renderGalleriesList(); return; } // ya está en caché: solo se vuelve a pintar, sin red
@@ -1277,11 +1486,12 @@ function renderGalleriesList(){
       <div style="margin-bottom:14px;">
         ${g.photos.map(p=>`
           <div class="thumb-row">
-            <img src="${p.url}" alt="" style="filter:${cssFilterFor(p)}">
+            <img src="${normalizeImageUrl(p.url) || p.url}" alt="" style="filter:${cssFilterFor(p)}">
             <div class="thumb-meta">
               <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
             </div>
             <div class="thumb-actions">
+              <a class="icon-btn" href="${normalizeImageUrl(p.url) || p.url}" download target="_blank" rel="noopener" title="Descargar / abrir">⭳</a>
               <button class="icon-btn" data-action="edit-photo" data-scope="gallery" data-gallery-id="${g.id}" data-id="${p.id}" title="Editar y retocar">✎</button>
               <button class="icon-btn danger" onclick="window.__deleteGalleryPhoto('${g.id}','${p.id}')" title="Eliminar">✕</button>
             </div>
@@ -1289,12 +1499,13 @@ function renderGalleriesList(){
         `).join('')}
       </div>` : '<p class="hint" style="margin-bottom:14px;">Esta galería todavía no tiene fotos.</p>'}
 
-      <div class="field"><label>Agregar foto a esta galería (URL o Drive)</label>
-        <div class="row cols-2">
-          <input type="url" placeholder="https://... o enlace de Drive" id="gp-url-${g.id}">
-          <input type="text" placeholder="Descripción (opcional)" id="gp-cap-${g.id}">
-        </div>
-        <button class="btn-ghost" style="margin-top:8px;" onclick="window.__addGalleryPhoto('${g.id}')">Añadir foto</button>
+      <div class="field"><label>Agregar fotos a esta galería — ligas, una por línea (URL o Drive)</label>
+        <textarea id="gp-urls-${g.id}" style="min-height:90px;" placeholder="https://drive.google.com/file/d/.../view
+https://drive.google.com/file/d/.../view" oninput="window.__previewMultiUrl('gp-urls-${g.id}','gp-preview-${g.id}')"></textarea>
+        <div id="gp-preview-${g.id}" style="display:flex; flex-wrap:wrap; gap:10px; margin:10px 0;"></div>
+        <label style="margin-top:6px;">O sube varios archivos desde tu equipo</label>
+        <input type="file" id="gp-file-${g.id}" accept="image/*" multiple>
+        <button class="btn-ghost" style="margin-top:8px;" onclick="window.__addGalleryPhoto('${g.id}')">Añadir fotos</button>
       </div>
       <div style="display:flex; gap:10px; margin-top:14px;">
         <button class="btn-ghost" onclick="window.__extendGallery('${g.id}')">Extender 3 meses</button>
@@ -1305,14 +1516,24 @@ function renderGalleriesList(){
   bindActionListeners(container); // vuelve a enlazar los botones "editar" que se acaban de dibujar
 }
 
-window.__addGalleryPhoto = function(id){
-  const urlInput = document.getElementById('gp-url-'+id);
-  const capInput = document.getElementById('gp-cap-'+id);
-  const url = normalizeImageUrl(urlInput.value.trim());
-  if(!url) { alert('Pega una URL de imagen.'); return; }
+window.__addGalleryPhoto = async function(id){
+  const urlsInput = document.getElementById('gp-urls-'+id);
+  const fileInput = document.getElementById('gp-file-'+id);
+  const urlsRaw = urlsInput.value.split('\n').map(l=>l.trim()).filter(Boolean);
+  const files = Array.from(fileInput.files || []);
+  if(!urlsRaw.length && !files.length){ alert('Pega al menos una liga o selecciona al menos un archivo.'); return; }
+
   const g = state.galleries.find(g=>g.id===id);
   if(!g) return;
-  g.photos.push({ id: uid(), url, caption: capInput.value.trim(), adjust: {...DEFAULT_ADJUST} });
+
+  for(const raw of urlsRaw){
+    g.photos.push({ id: uid(), url: normalizeImageUrl(raw), caption: '', adjust: {...DEFAULT_ADJUST} });
+  }
+  for(const file of files){
+    const finalUrl = await smartUploadFile(file, ['EstudioFoto', 'Galerías', g.name]);
+    g.photos.push({ id: uid(), url: finalUrl, caption: '', adjust: {...DEFAULT_ADJUST} });
+  }
+
   renderGalleriesList(); // al instante
   STORAGE.set('gallery:'+id, g); // en segundo plano
 };
