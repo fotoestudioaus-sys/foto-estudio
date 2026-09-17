@@ -6,8 +6,9 @@
 <title>Estudio Fotográfico — Portafolio</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;0,6..72,600;1,6..72,500&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&family=Work+Sans:wght@400;500&family=Space+Mono:wght@400&family=Bitter:ital,wght@0,600;1,400&display=swap" rel="stylesheet">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-<script src="https://apis.google.com/js/api.js" async defer></script>
+<!-- Los scripts de Google (Identity Services y Picker) ya NO se cargan aquí de forma fija:
+     se cargan solo cuando alguien entra al panel de administrador, para que el sitio
+     público (lo que ven tus visitantes y clientes) cargue más rápido. -->
 <style>
   :root{
     /* ---- Fuentes: preset por defecto "Editorial Negativo" ---- */
@@ -495,7 +496,10 @@ let state = {
   saveMsg: '',
   galleries: null,        // caché en memoria de las galerías, para no re-descargarlas en cada clic
   editingPhoto: null,     // { scope:'portfolio'|'gallery', galleryId?, id, draft:{...} } — foto que se está editando/retocando
-  driveToken: null        // token de acceso a Google Drive del usuario (Camino 3); vive solo en memoria, no se guarda
+  driveToken: null,       // token de acceso a Google Drive del usuario (Camino 3); vive solo en memoria, no se guarda
+  galleryDetailId: null,  // si no es null, el admin está viendo la sub-página de esa galería en vez de la lista completa
+  galleryVisibleCounts: {}, // cuántas fotos se muestran por galería antes de dar "Cargar más" (paginación en memoria)
+  captionJob: null        // { label, total, done, errors } — trabajo de descripciones automáticas corriendo en segundo plano
 };
 
 /* ---------------------------- SESIÓN DE ADMIN (persistente) ---------------------------- */
@@ -558,6 +562,26 @@ function fmtDate(iso){
 }
 function uid(){ return Math.random().toString(36).slice(2,9); }
 
+/* Carga un <script> externo una sola vez y avisa cuando está listo. Se usa para
+   traer los scripts de Google Identity Services / Picker SOLO cuando alguien
+   entra al panel de administrador, no para cada visitante público. */
+const _loadedScripts = {};
+function loadScriptOnce(src){
+  if(_loadedScripts[src]) return _loadedScripts[src];
+  _loadedScripts[src] = new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onload = ()=> resolve();
+    s.onerror = ()=> reject(new Error('No se pudo cargar ' + src));
+    document.head.appendChild(s);
+  });
+  return _loadedScripts[src];
+}
+function ensureGoogleAdminScriptsLoading(){
+  loadScriptOnce('https://accounts.google.com/gsi/client');
+  loadScriptOnce('https://apis.google.com/js/api.js');
+}
+
 /* Vista previa en vivo: detecta si una URL de foto realmente carga antes de guardarla.
    Se usa en los formularios de "agregar foto" (portafolio y galerías). */
 window.__previewUrl = function(inputId, previewId){
@@ -614,17 +638,6 @@ async function loadInitial(){
   if(!design){ design = DEFAULT_DESIGN; await STORAGE.set('site:design', design); }
   if(!portfolio){ portfolio = DEFAULT_PORTFOLIO; await STORAGE.set('site:portfolio', portfolio); }
 
-  let pass = await STORAGE.get('site:admin-pass');
-  if(!pass){
-    pass = { hash: DEFAULT_PASSWORD_HASH };
-    await STORAGE.set('site:admin-pass', pass);
-  } else if(pass.value && !pass.hash){
-    // Migración: contraseñas guardadas antes de este cambio estaban en texto plano.
-    // Las convertimos a hash automáticamente la primera vez que se detectan.
-    pass = { hash: await sha256(pass.value) };
-    await STORAGE.set('site:admin-pass', pass);
-  }
-
   state.content = content; state.design = design; state.portfolio = portfolio;
   applyDesign(design);
 
@@ -635,14 +648,31 @@ async function loadInitial(){
   } else if(adminParam){
     if(hasValidAdminSession()){
       state.isAdmin = true; state.view = 'admin';
+      render();
     } else {
+      // La contraseña solo se consulta cuando alguien realmente va a iniciar sesión,
+      // no en cada carga pública del sitio — así los visitantes normales no pagan ese costo.
+      await ensureAdminPasswordReady();
       state.view = 'admin-login';
+      render();
     }
-    render();
   } else {
     state.view = 'public';
     render();
   }
+}
+
+async function ensureAdminPasswordReady(){
+  let pass = await STORAGE.get('site:admin-pass');
+  if(!pass){
+    pass = { hash: DEFAULT_PASSWORD_HASH };
+    await STORAGE.set('site:admin-pass', pass);
+  } else if(pass.value && !pass.hash){
+    // Migración: contraseñas guardadas antes de este cambio estaban en texto plano.
+    pass = { hash: await sha256(pass.value) };
+    await STORAGE.set('site:admin-pass', pass);
+  }
+  return pass;
 }
 
 /* ---------------------------- RENDER ROOT ---------------------------- */
@@ -840,12 +870,14 @@ function renderLogin(){
 
 /* ---------------------------- ADMIN PANEL ---------------------------- */
 function renderAdmin(){
+  ensureGoogleAdminScriptsLoading(); // en segundo plano, no bloquea el panel
   return `
   <div class="admin-shell">
     <div class="admin-top">
       <div class="brand">Estudio<span class="dot">·</span>Foto — Panel</div>
       <div class="admin-actions">
         <span class="save-msg mono">${state.saveMsg}</span>
+        ${state.captionJob ? `<span class="mono" id="caption-job-status" style="color:var(--accent); font-size:12px;">✨ Generando descripciones (${state.captionJob.label}): ${state.captionJob.done}/${state.captionJob.total}${state.captionJob.errors ? ` · ${state.captionJob.errors} con error` : ''}</span>` : ''}
         ${driveConnected()
           ? `<span class="status-pill ok" title="Conectado a Google Drive">Drive ✓</span><button class="btn" onclick="window.__disconnectDrive()">Desconectar Drive</button>`
           : `<button class="btn" onclick="window.__connectDrive()">${DRIVE_ENABLED ? 'Conectar Google Drive' : 'Conectar Google Drive (falta configurar)'}</button>`
@@ -1003,6 +1035,9 @@ https://otra-liga.com/foto.jpg" oninput="window.__previewMultiUrl('np-urls','np-
 }
 
 function adminGalerias(){
+  if(state.galleryDetailId){
+    return renderGalleryDetail(state.galleryDetailId);
+  }
   return `
   <div class="admin-h">Entregas privadas de sesión</div>
   <h1 class="admin-title">Galerías de clientes</h1>
@@ -1162,11 +1197,12 @@ window.__editorApplyPreset = function(key){
    El sitio nunca habla directo con Gemini — le pide al backend de
    Apps Script que lo haga, así la clave de Gemini nunca queda
    expuesta en el navegador de nadie.
+   Esta función es SILENCIOSA (no muestra ventanas emergentes) para
+   que se pueda usar en lote sobre muchas fotos sin interrumpir.
    ===================================================================== */
 async function generateAiCaption(photoUrl){
   if(!STORAGE_AVAILABLE){
-    alert('Esto requiere el backend de Google Sheets conectado (mismo que usas para guardar). Revisa la guía "Backend con Google Sheets".');
-    return null;
+    return { error: 'Backend de Google Sheets no conectado.' };
   }
   try{
     const res = await fetch(API_URL, {
@@ -1175,15 +1211,11 @@ async function generateAiCaption(photoUrl){
       body: JSON.stringify({ action: 'caption', url: normalizeImageUrl(photoUrl) || photoUrl, secret: APP_SECRET })
     });
     const data = await res.json();
-    if(data.error){
-      alert('No se pudo generar la descripción: ' + data.error + '\n\n¿Ya configuraste GEMINI_API_KEY en tu Apps Script? Revisa la guía "picker-y-ia.md".');
-      return null;
-    }
-    return (data.caption || '').trim();
+    if(data.error) return { error: data.error };
+    return { caption: (data.caption || '').trim() };
   } catch(e){
     console.error('Error generando descripción con IA:', e);
-    alert('No se pudo contactar al backend para generar la descripción.');
-    return null;
+    return { error: 'No se pudo contactar al backend.' };
   }
 }
 
@@ -1192,35 +1224,65 @@ window.__editorAutoCaption = async function(){
   if(!ep) return;
   const status = document.getElementById('ep-caption-status');
   if(status) status.innerHTML = '<p class="hint">Generando descripción…</p>';
-  const caption = await generateAiCaption(ep.draft.url);
-  if(status) status.innerHTML = '';
-  if(caption){
-    document.getElementById('ep-caption').value = caption;
-    ep.draft.caption = caption;
+  const result = await generateAiCaption(ep.draft.url);
+  if(!status) return; // el editor se cerró mientras esperábamos
+  if(result.caption){
+    status.innerHTML = '';
+    document.getElementById('ep-caption').value = result.caption;
+    ep.draft.caption = result.caption;
+  } else {
+    status.innerHTML = `<p class="hint" style="color:#E06B5A;">No se pudo generar: ${escapeHtml(result.error||'error desconocido')}</p>`;
   }
 };
 
-/* Genera descripciones para todas las fotos de un contexto que aún no tienen una */
+/* Genera descripciones para todas las fotos de un contexto que aún no tienen una.
+   Corre en segundo plano: no bloquea con ventanas, se puede seguir usando el panel
+   (cambiar de pestaña, editar otras fotos) mientras trabaja. El progreso se ve en
+   la barra superior del panel hasta que termina. */
 window.__autoCaptionAll = async function(scope, galleryId){
+  if(state.captionJob){ alert('Ya hay una generación de descripciones en curso — espera a que termine antes de iniciar otra.'); return; }
+
   const photos = scope === 'portfolio' ? state.portfolio : (state.galleries.find(g=>g.id===galleryId) || {photos:[]}).photos;
   const pending = photos.filter(p => !p.caption || !p.caption.trim());
   if(!pending.length){ alert('Todas las fotos de esta sección ya tienen descripción.'); return; }
-  if(!confirm(`Se generará una descripción automática para ${pending.length} foto(s) sin descripción. Puede tardar unos segundos por foto. ¿Continuar?`)) return;
+  if(!confirm(`Se generará una descripción automática para ${pending.length} foto(s) sin descripción, en segundo plano. Puedes seguir usando el panel mientras tanto. ¿Continuar?`)) return;
+
+  state.captionJob = { label: scope === 'portfolio' ? 'Portafolio' : 'Galería', total: pending.length, done: 0, errors: 0 };
+  render();
 
   for(const photo of pending){
-    const caption = await generateAiCaption(photo.url);
-    if(caption) photo.caption = caption;
+    const result = await generateAiCaption(photo.url);
+    if(result.caption) photo.caption = result.caption;
+    else state.captionJob.errors++;
+    state.captionJob.done++;
+    updateCaptionJobStatusDom(); // actualiza solo el texto de la barra, sin re-dibujar todo el panel
   }
 
+  const summary = state.captionJob;
+  state.captionJob = null;
+
   if(scope === 'portfolio'){
-    render();
     STORAGE.set('site:portfolio', state.portfolio);
   } else {
     const g = state.galleries.find(g=>g.id===galleryId);
-    renderGalleriesList();
-    STORAGE.set('gallery:'+galleryId, g);
+    if(g) STORAGE.set('gallery:'+galleryId, g);
   }
+
+  state.saveMsg = `✨ Listo: ${summary.total - summary.errors}/${summary.total} descripciones generadas${summary.errors ? ` (${summary.errors} con error)` : ''}`;
+  render();
+  setTimeout(()=>{ state.saveMsg=''; const el=document.querySelector('.save-msg'); if(el) el.textContent=''; }, 5000);
 };
+
+/* Actualiza solo el texto de la barra de progreso, sin re-renderizar todo el panel
+   (evita interrumpir el scroll o los campos que el usuario esté llenando mientras
+   la generación corre en segundo plano). */
+function updateCaptionJobStatusDom(){
+  const el = document.getElementById('caption-job-status');
+  if(el && state.captionJob){
+    const { label, done, total, errors } = state.captionJob;
+    el.textContent = `✨ Generando descripciones (${label}): ${done}/${total}${errors ? ` · ${errors} con error` : ''}`;
+  }
+}
 
 window.__editorSave = async function(){
   const ep = state.editingPhoto;
@@ -1437,14 +1499,14 @@ let driveTokenClient = null;
 
 function driveConnected(){ return !!state.driveToken; }
 
-window.__connectDrive = function(){
+window.__connectDrive = async function(){
   if(!DRIVE_ENABLED){
     alert('Todavía no configuraste tu Client ID de Google Drive. Sigue la guía "camino3-google-drive.md", sección "Paso 3", y pégalo en la línea DRIVE_CLIENT_ID del archivo.');
     return;
   }
   if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2){
-    alert('Google todavía está cargando, espera un segundo y vuelve a intentar.');
-    return;
+    try{ await loadScriptOnce('https://accounts.google.com/gsi/client'); }
+    catch(e){ alert('No se pudo cargar el inicio de sesión de Google. Revisa tu conexión e intenta de nuevo.'); return; }
   }
   if(!driveTokenClient){
     driveTokenClient = google.accounts.oauth2.initTokenClient({
@@ -1475,11 +1537,11 @@ window.__disconnectDrive = function(){
    SELECTOR VISUAL DE GOOGLE DRIVE (Picker) — navegar y elegir fotos con clic
    ===================================================================== */
 let pickerApiLoaded = false;
-function ensurePickerApiLoaded(callback){
+async function ensurePickerApiLoaded(callback){
   if(pickerApiLoaded){ callback(); return; }
   if(typeof gapi === 'undefined'){
-    alert('Google todavía está cargando, espera un segundo e intenta de nuevo.');
-    return;
+    try{ await loadScriptOnce('https://apis.google.com/js/api.js'); }
+    catch(e){ alert('No se pudo cargar el selector de Google Drive. Revisa tu conexión e intenta de nuevo.'); return; }
   }
   gapi.load('picker', { callback: ()=>{ pickerApiLoaded = true; callback(); } });
 }
@@ -1659,47 +1721,105 @@ function renderGalleriesList(){
     <div class="card">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
         <div><strong>${escapeHtml(g.name)}</strong> ${status}</div>
-        <div class="hint" style="margin:0;">Creada ${fmtDate(g.createdAt)} · vence ${fmtDate(g.expiresAt)}</div>
+        <div class="hint" style="margin:0;">${g.photos.length} foto(s) · creada ${fmtDate(g.createdAt)} · vence ${fmtDate(g.expiresAt)}</div>
       </div>
       <div class="gallery-link-box" style="margin-bottom:14px;">
         <input type="text" readonly value="${link}" onclick="this.select()">
         <button class="icon-btn" onclick="navigator.clipboard.writeText('${link}'); this.textContent='✓';">⧉</button>
       </div>
-
-      ${g.photos.length ? `
-      <div style="margin-bottom:14px;">
-        <button class="btn-ghost" style="margin-bottom:10px;" onclick="window.__autoCaptionAll('gallery','${g.id}')">✨ Generar descripciones automáticas para las fotos sin descripción</button>
-        ${g.photos.map(p=>`
-          <div class="thumb-row">
-            <img src="${normalizeImageUrl(p.url) || p.url}" alt="" style="filter:${cssFilterFor(p)}">
-            <div class="thumb-meta">
-              <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
-            </div>
-            <div class="thumb-actions">
-              <a class="icon-btn" href="${normalizeImageUrl(p.url) || p.url}" download target="_blank" rel="noopener" title="Descargar / abrir">⭳</a>
-              <button class="icon-btn" data-action="edit-photo" data-scope="gallery" data-gallery-id="${g.id}" data-id="${p.id}" title="Editar y retocar">✎</button>
-              <button class="icon-btn danger" onclick="window.__deleteGalleryPhoto('${g.id}','${p.id}')" title="Eliminar">✕</button>
-            </div>
-          </div>
-        `).join('')}
-      </div>` : '<p class="hint" style="margin-bottom:14px;">Esta galería todavía no tiene fotos.</p>'}
-
-      <div class="field"><label>Agregar fotos a esta galería — ligas, una por línea (URL o Drive)</label>
-        <textarea id="gp-urls-${g.id}" style="min-height:90px;" placeholder="https://drive.google.com/file/d/.../view
-https://drive.google.com/file/d/.../view" oninput="window.__previewMultiUrl('gp-urls-${g.id}','gp-preview-${g.id}')"></textarea>
-        <div id="gp-preview-${g.id}" style="display:flex; flex-wrap:wrap; gap:10px; margin:10px 0;"></div>
-        <button type="button" class="btn-ghost" style="margin-top:6px;" onclick="window.__openDrivePicker('gallery','${g.id}')">📁 Elegir desde Google Drive</button>
-        <label style="margin-top:10px;">O sube varios archivos desde tu equipo</label>
-        <input type="file" id="gp-file-${g.id}" accept="image/*" multiple>
-        <button class="btn-ghost" style="margin-top:8px;" onclick="window.__addGalleryPhoto('${g.id}')">Añadir fotos</button>
-      </div>
-      <div style="display:flex; gap:10px; margin-top:14px;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn-dark" onclick="window.__openGalleryDetail('${g.id}')">Abrir galería →</button>
         <button class="btn-ghost" onclick="window.__extendGallery('${g.id}')">Extender 3 meses</button>
         <button class="btn-ghost btn-danger" onclick="window.__deleteGallery('${g.id}')">Eliminar galería</button>
       </div>
     </div>`;
   }).join('');
-  bindActionListeners(container); // vuelve a enlazar los botones "editar" que se acaban de dibujar
+  bindActionListeners(container);
+}
+
+const GALLERY_PAGE_SIZE = 30;
+
+window.__openGalleryDetail = function(galleryId){
+  state.galleryDetailId = galleryId;
+  if(!state.galleryVisibleCounts[galleryId]) state.galleryVisibleCounts[galleryId] = GALLERY_PAGE_SIZE;
+  render();
+};
+window.__closeGalleryDetail = function(){
+  state.galleryDetailId = null;
+  render();
+};
+window.__loadMoreGalleryPhotos = function(galleryId){
+  state.galleryVisibleCounts[galleryId] = (state.galleryVisibleCounts[galleryId] || GALLERY_PAGE_SIZE) + GALLERY_PAGE_SIZE;
+  render();
+};
+
+function renderGalleryDetail(galleryId){
+  const g = (state.galleries || []).find(x => x.id === galleryId);
+  if(!g){
+    return `<p class="hint">Esta galería ya no está disponible. <button class="btn-ghost" onclick="window.__closeGalleryDetail()">← Volver a galerías</button></p>`;
+  }
+  const expired = new Date(g.expiresAt) < new Date();
+  const daysLeft = Math.ceil((new Date(g.expiresAt)-new Date())/86400000);
+  const status = expired ? '<span class="status-pill expired">Expirada</span>' : (daysLeft<14 ? '<span class="status-pill warn">Vence pronto</span>' : '<span class="status-pill ok">Activa</span>');
+  const link = `${location.origin}${location.pathname}?g=${g.id}`;
+
+  const visibleCount = state.galleryVisibleCounts[galleryId] || GALLERY_PAGE_SIZE;
+  const visiblePhotos = g.photos.slice(0, visibleCount);
+  const remaining = g.photos.length - visiblePhotos.length;
+
+  return `
+  <button class="btn-ghost" style="margin-bottom:18px;" onclick="window.__closeGalleryDetail()">← Volver a galerías</button>
+  <div class="admin-h">Galería</div>
+  <h1 class="admin-title">${escapeHtml(g.name)} ${status}</h1>
+
+  <div class="card">
+    <div class="hint" style="margin-bottom:10px;">${g.photos.length} foto(s) · creada ${fmtDate(g.createdAt)} · vence ${fmtDate(g.expiresAt)}</div>
+    <div class="gallery-link-box" style="margin-bottom:14px;">
+      <input type="text" readonly value="${link}" onclick="this.select()">
+      <button class="icon-btn" onclick="navigator.clipboard.writeText('${link}'); this.textContent='✓';">⧉</button>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn-ghost" onclick="window.__extendGallery('${g.id}')">Extender 3 meses</button>
+      <button class="btn-ghost btn-danger" onclick="window.__deleteGallery('${g.id}')">Eliminar galería</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="admin-h" style="margin-bottom:14px;">Agregar fotos a esta galería</div>
+    <div class="field"><label>Ligas, una por línea (URL o Drive)</label>
+      <textarea id="gp-urls-${g.id}" style="min-height:90px;" placeholder="https://drive.google.com/file/d/.../view
+https://drive.google.com/file/d/.../view" oninput="window.__previewMultiUrl('gp-urls-${g.id}','gp-preview-${g.id}')"></textarea>
+      <div id="gp-preview-${g.id}" style="display:flex; flex-wrap:wrap; gap:10px; margin:10px 0;"></div>
+    </div>
+    <button type="button" class="btn-ghost" onclick="window.__openDrivePicker('gallery','${g.id}')">📁 Elegir desde Google Drive</button>
+    <div class="field" style="margin-top:14px;">
+      <label>O sube varios archivos desde tu equipo</label>
+      <input type="file" id="gp-file-${g.id}" accept="image/*" multiple>
+    </div>
+    <button class="btn-dark" onclick="window.__addGalleryPhoto('${g.id}')">Añadir fotos</button>
+  </div>
+
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin:30px 0 14px;">
+    <div class="admin-h" style="margin:0;">Fotos de esta galería (mostrando ${visiblePhotos.length} de ${g.photos.length})</div>
+    <button class="btn-ghost" onclick="window.__autoCaptionAll('gallery','${g.id}')">✨ Generar descripciones automáticas para las fotos sin descripción</button>
+  </div>
+
+  ${visiblePhotos.length ? visiblePhotos.map(p=>`
+    <div class="thumb-row">
+      <img src="${normalizeImageUrl(p.url) || p.url}" alt="" style="filter:${cssFilterFor(p)}">
+      <div class="thumb-meta">
+        <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
+      </div>
+      <div class="thumb-actions">
+        <a class="icon-btn" href="${normalizeImageUrl(p.url) || p.url}" download target="_blank" rel="noopener" title="Descargar / abrir">⭳</a>
+        <button class="icon-btn" data-action="edit-photo" data-scope="gallery" data-gallery-id="${g.id}" data-id="${p.id}" title="Editar y retocar">✎</button>
+        <button class="icon-btn danger" onclick="window.__deleteGalleryPhoto('${g.id}','${p.id}')" title="Eliminar">✕</button>
+      </div>
+    </div>
+  `).join('') : '<p class="hint">Esta galería todavía no tiene fotos.</p>'}
+
+  ${remaining > 0 ? `<button class="btn-ghost" style="margin-top:14px; width:100%;" onclick="window.__loadMoreGalleryPhotos('${g.id}')">Cargar ${Math.min(remaining, GALLERY_PAGE_SIZE)} más (quedan ${remaining})</button>` : ''}
+  `;
 }
 
 window.__addGalleryPhoto = async function(id){
@@ -1720,27 +1840,28 @@ window.__addGalleryPhoto = async function(id){
     g.photos.push({ id: uid(), url: finalUrl, caption: '', adjust: {...DEFAULT_ADJUST} });
   }
 
-  renderGalleriesList(); // al instante
+  render(); // al instante, en la vista que corresponda (lista o detalle)
   STORAGE.set('gallery:'+id, g); // en segundo plano
 };
 window.__deleteGalleryPhoto = function(galleryId, photoId){
   const g = state.galleries.find(g=>g.id===galleryId);
   if(!g) return;
   g.photos = g.photos.filter(p=>p.id!==photoId);
-  renderGalleriesList();
+  render();
   STORAGE.set('gallery:'+galleryId, g);
 };
 window.__extendGallery = function(id){
   const g = state.galleries.find(g=>g.id===id);
   if(!g) return;
   g.expiresAt = addMonths(new Date(g.expiresAt), 3).toISOString();
-  renderGalleriesList();
+  render();
   STORAGE.set('gallery:'+id, g);
 };
 window.__deleteGallery = function(id){
   if(!confirm('¿Eliminar esta galería? Esta acción no se puede deshacer.')) return;
   state.galleries = state.galleries.filter(g=>g.id!==id);
-  renderGalleriesList();
+  if(state.galleryDetailId === id) state.galleryDetailId = null; // si la estabas viendo, regresa a la lista
+  render();
   (async ()=>{
     await STORAGE.delete('gallery:'+id);
     const idx = (await STORAGE.get('galleries:index')) || [];
