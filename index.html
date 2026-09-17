@@ -1659,14 +1659,19 @@ async function onDrivePickerResult(data, targetType, targetId){
   if(!docs.length) return;
 
   const newEntries = [];
+  const shareFailed = []; // nombres de archivos que Google rechazó compartir
   for(const doc of docs){
+    let shared = false;
     try{
-      await fetch(`https://www.googleapis.com/drive/v3/files/${doc.id}/permissions`, {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${doc.id}/permissions`, {
         method: 'POST',
         headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: 'reader', type: 'anyone' })
       });
+      shared = res.ok; // fetch() NO lanza error por un 403 — hay que revisar res.ok explícitamente
+      if(!shared) console.error('Drive rechazó compartir', doc.name, res.status, await res.text());
     } catch(e){ console.error('No se pudo compartir', doc.name, e); }
+    if(!shared) shareFailed.push(doc.name);
     newEntries.push({ id: uid(), url: `https://drive.google.com/thumbnail?id=${doc.id}&sz=w2000`, caption: '', adjust: {...DEFAULT_ADJUST} });
   }
 
@@ -1683,6 +1688,14 @@ async function onDrivePickerResult(data, targetType, targetId){
     g.photos.push(...newEntries);
     renderGalleriesList();
     STORAGE.set('gallery:' + targetId, g);
+  }
+
+  if(shareFailed.length){
+    alert(
+      `Se agregaron ${docs.length} foto(s), pero Google no dejó compartir públicamente ${shareFailed.length} de ellas (posiblemente porque no eres el propietario original en Drive, o viven en una carpeta compartida).\n\n` +
+      `Estas fotos NO se van a ver hasta que las compartas a mano: en Google Drive, selecciona esos archivos → Compartir → "Cualquier persona con el enlace" → Lector.\n\n` +
+      `Archivos afectados:\n${shareFailed.slice(0,10).join('\n')}${shareFailed.length>10 ? `\n… y ${shareFailed.length-10} más` : ''}`
+    );
   }
 }
 
@@ -1741,11 +1754,16 @@ async function uploadFileToDriveFolder(file, folderId){
   if(!created.id) throw new Error('Drive no aceptó el archivo "' + file.name + '".');
 
   // Hacerlo visible por liga (solo lectura), igual que "Cualquier persona con el enlace"
-  await fetch(`https://www.googleapis.com/drive/v3/files/${created.id}/permissions`, {
+  const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${created.id}/permissions`, {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'application/json' },
     body: JSON.stringify({ role: 'reader', type: 'anyone' })
   });
+  if(!permRes.ok){
+    console.error('Drive no dejó compartir', file.name, permRes.status, await permRes.text());
+    // Esto es raro para archivos creados por el propio sitio (normalmente sí se puede),
+    // pero lo dejamos avisado en la consola por si acaso; la foto se guarda igual.
+  }
 
   return `https://drive.google.com/thumbnail?id=${created.id}&sz=w2000`;
 }
