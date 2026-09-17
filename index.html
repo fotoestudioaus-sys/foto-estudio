@@ -423,6 +423,21 @@ const STORAGE = {
       });
       return true;
     } catch(e){ return null; }
+  },
+  /* Agrega "id" a la lista guardada en "key" de forma ATÓMICA en el servidor
+     (lee + agrega + guarda en un solo paso allá, con bloqueo) — evita que dos
+     creaciones casi simultáneas se pisen entre sí, cosa que sí podía pasar
+     haciendo esto en dos pasos separados desde el navegador. */
+  async appendToIndex(key, id){
+    if(!STORAGE_AVAILABLE) return null;
+    try{
+      await fetch(API_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'appendToIndex', key, value: id, secret: APP_SECRET })
+      });
+      return true;
+    } catch(e){ console.error('Error agregando al índice', key, e); return null; }
   }
 };
 
@@ -499,7 +514,8 @@ let state = {
   driveToken: null,       // token de acceso a Google Drive del usuario (Camino 3); vive solo en memoria, no se guarda
   galleryDetailId: null,  // si no es null, el admin está viendo la sub-página de esa galería en vez de la lista completa
   galleryVisibleCounts: {}, // cuántas fotos se muestran por galería antes de dar "Cargar más" (paginación en memoria)
-  captionJob: null        // { label, total, done, errors } — trabajo de descripciones automáticas corriendo en segundo plano
+  captionJob: null,       // { batchId, label, total, done, errors } — trabajo de descripciones corriendo en el backend
+  creatingGallery: false  // evita crear dos galerías si el botón se activa dos veces seguidas
 };
 
 /* ---------------------------- SESIÓN DE ADMIN (persistente) ---------------------------- */
@@ -1235,43 +1251,101 @@ window.__editorAutoCaption = async function(){
   }
 };
 
+/* Construye la "referencia" que el backend usa para saber dónde guardar
+   la descripción de vuelta: en qué foto, de qué galería (o del portafolio). */
+function refFor(scope, photoId, galleryId){
+  return scope === 'portfolio' ? `portfolio:${photoId}` : `gallery:${galleryId}:${photoId}`;
+}
+
 /* Genera descripciones para todas las fotos de un contexto que aún no tienen una.
-   Corre en segundo plano: no bloquea con ventanas, se puede seguir usando el panel
-   (cambiar de pestaña, editar otras fotos) mientras trabaja. El progreso se ve en
-   la barra superior del panel hasta que termina. */
+   VERDADERO segundo plano: el sitio solo le pide al backend que encole las fotos
+   (un segundo) y el backend las procesa por su cuenta con un disparador de tiempo,
+   una cada tanto — sigue trabajando aunque cierres el navegador por completo.
+   Mientras tengas esta pestaña abierta, verás el progreso actualizarse solo. */
 window.__autoCaptionAll = async function(scope, galleryId){
   if(state.captionJob){ alert('Ya hay una generación de descripciones en curso — espera a que termine antes de iniciar otra.'); return; }
+  if(!STORAGE_AVAILABLE){ alert('Esto requiere el backend de Google Sheets conectado.'); return; }
 
   const photos = scope === 'portfolio' ? state.portfolio : (state.galleries.find(g=>g.id===galleryId) || {photos:[]}).photos;
   const pending = photos.filter(p => !p.caption || !p.caption.trim());
   if(!pending.length){ alert('Todas las fotos de esta sección ya tienen descripción.'); return; }
-  if(!confirm(`Se generará una descripción automática para ${pending.length} foto(s) sin descripción, en segundo plano. Puedes seguir usando el panel mientras tanto. ¿Continuar?`)) return;
+  if(!confirm(`Se enviarán ${pending.length} foto(s) a un proceso en segundo plano en tu backend (a un ritmo de unas 3 por minuto, para no exceder los límites de Gemini). Puedes cerrar el sitio — seguirá trabajando solo. ¿Continuar?`)) return;
 
-  state.captionJob = { label: scope === 'portfolio' ? 'Portafolio' : 'Galería', total: pending.length, done: 0, errors: 0 };
-  render();
+  const items = pending.map(p => ({ ref: refFor(scope, p.id, galleryId), url: normalizeImageUrl(p.url) || p.url }));
 
-  for(const photo of pending){
-    const result = await generateAiCaption(photo.url);
-    if(result.caption) photo.caption = result.caption;
-    else state.captionJob.errors++;
-    state.captionJob.done++;
-    updateCaptionJobStatusDom(); // actualiza solo el texto de la barra, sin re-dibujar todo el panel
+  let enqueueResult;
+  try{
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'enqueueCaptions', items, secret: APP_SECRET })
+    });
+    enqueueResult = await res.json();
+  } catch(e){
+    alert('No se pudo iniciar el proceso: ' + e.message);
+    return;
+  }
+  if(!enqueueResult || enqueueResult.error){
+    alert('No se pudo iniciar el proceso: ' + (enqueueResult ? enqueueResult.error : 'error desconocido') + '\n\n¿Ya ejecutaste "configurarDisparadorDescripciones" una vez en tu Apps Script? Revisa la guía.');
+    return;
   }
 
-  const summary = state.captionJob;
-  state.captionJob = null;
-
-  if(scope === 'portfolio'){
-    STORAGE.set('site:portfolio', state.portfolio);
-  } else {
-    const g = state.galleries.find(g=>g.id===galleryId);
-    if(g) STORAGE.set('gallery:'+galleryId, g);
-  }
-
-  state.saveMsg = `✨ Listo: ${summary.total - summary.errors}/${summary.total} descripciones generadas${summary.errors ? ` (${summary.errors} con error)` : ''}`;
+  state.captionJob = {
+    batchId: enqueueResult.batchId,
+    label: scope === 'portfolio' ? 'Portafolio' : 'Galería',
+    scope, galleryId,
+    total: enqueueResult.queued, done: 0, errors: 0
+  };
   render();
-  setTimeout(()=>{ state.saveMsg=''; const el=document.querySelector('.save-msg'); if(el) el.textContent=''; }, 5000);
+  pollCaptionJob(); // empieza a consultar el progreso cada cierto tiempo
 };
+
+/* Mientras haya un trabajo en curso Y esta pestaña siga abierta, consulta el
+   progreso cada 20 segundos para mantener la barra actualizada. El trabajo en
+   sí NO depende de este sondeo — sigue corriendo en el backend aunque cierres
+   la pestaña; esto es solo para que, si la dejas abierta, veas el avance. */
+async function pollCaptionJob(){
+  if(!state.captionJob) return;
+  const { batchId } = state.captionJob;
+
+  const check = async ()=>{
+    if(!state.captionJob || state.captionJob.batchId !== batchId) return; // se canceló o cambió
+
+    let status;
+    try{
+      const res = await fetch(`${API_URL}?action=captionQueueStatus&batchId=${encodeURIComponent(batchId)}&secret=${encodeURIComponent(APP_SECRET)}`);
+      status = await res.json();
+    } catch(e){ setTimeout(check, 20000); return; }
+
+    if(!status || status.error){ setTimeout(check, 20000); return; }
+
+    state.captionJob.done = status.done + status.errors;
+    state.captionJob.errors = status.errors;
+    updateCaptionJobStatusDom();
+
+    if(status.pending > 0){
+      setTimeout(check, 20000);
+    } else {
+      // Terminado: recarga los datos frescos desde la hoja (el backend ya escribió
+      // las descripciones directo ahí) para reflejarlas en el panel.
+      const summary = state.captionJob;
+      state.captionJob = null;
+      if(summary.scope === 'portfolio'){
+        state.portfolio = (await STORAGE.get('site:portfolio')) || state.portfolio;
+      } else {
+        const fresh = await STORAGE.get('gallery:' + summary.galleryId);
+        if(fresh){
+          const idx = state.galleries.findIndex(g => g.id === summary.galleryId);
+          if(idx !== -1) state.galleries[idx] = fresh;
+        }
+      }
+      state.saveMsg = `✨ Listo: ${status.done}/${summary.total} descripciones generadas${status.errors ? ` (${status.errors} con error)` : ''}`;
+      render();
+      setTimeout(()=>{ state.saveMsg=''; const el=document.querySelector('.save-msg'); if(el) el.textContent=''; }, 6000);
+    }
+  };
+  check();
+}
 
 /* Actualiza solo el texto de la barra de progreso, sin re-renderizar todo el panel
    (evita interrumpir el scroll o los campos que el usuario esté llenando mientras
@@ -1280,9 +1354,14 @@ function updateCaptionJobStatusDom(){
   const el = document.getElementById('caption-job-status');
   if(el && state.captionJob){
     const { label, done, total, errors } = state.captionJob;
-    el.textContent = `✨ Generando descripciones (${label}): ${done}/${total}${errors ? ` · ${errors} con error` : ''}`;
+    el.textContent = `✨ Generando descripciones (${label}): ${done}/${total}${errors ? ` · ${errors} con error` : ''} — puedes cerrar el sitio, sigue trabajando solo`;
   }
 }
+
+/* Si el admin vuelve a entrar al panel mientras un lote sigue pendiente de una
+   sesión anterior, no hay forma de saberlo desde el navegador (no guardamos el
+   batchId entre sesiones) — el trabajo igual sigue corriendo en el backend y
+   las descripciones van apareciendo solas la próxima vez que abras cada galería. */
 
 window.__editorSave = async function(){
   const ep = state.editingPhoto;
@@ -1431,9 +1510,11 @@ async function onAction(e){
   }
 
   if(action==='create-gallery'){
+    if(state.creatingGallery) return; // evita crear dos veces si se hace doble clic
     const name = document.getElementById('ng-name').value.trim();
     const months = parseInt(document.getElementById('ng-duration').value,10);
     if(!name){ alert('Ponle un nombre a la galería.'); return; }
+    state.creatingGallery = true;
     const id = uid();
     const now = new Date();
     const gallery = {
@@ -1446,12 +1527,12 @@ async function onAction(e){
     state.galleries = [...(state.galleries||[]), gallery]; // caché local: no hace falta re-descargar todo
     document.getElementById('ng-name').value = '';
     renderGalleriesList(); // se ve al instante
-    (async ()=>{
+    try{
       await STORAGE.set('gallery:' + id, gallery);
-      const idx = (await STORAGE.get('galleries:index')) || [];
-      idx.push(id);
-      await STORAGE.set('galleries:index', idx);
-    })();
+      await STORAGE.appendToIndex('galleries:index', id); // atómico: no puede pisarse con otra creación simultánea
+    } finally {
+      state.creatingGallery = false;
+    }
   }
 
 
