@@ -480,6 +480,10 @@ const DEFAULT_CONTENT = {
   calendlyLink: 'https://calendly.com/fotoestudioaus/30min'
 };
 const DEFAULT_DESIGN = { font:'editorial', color:'ambar' };
+/* Categorías fijas de la página "Galería" — bloques personales, distintos del
+   Portafolio comercial (Retrato/Boda/Producto/Evento). */
+const GALERIA_CATEGORIES = ['Fotografía urbana','Fotografía paisajes','Fotografía de rostros','Etnofotografía','Fotografía de eventos'];
+const DEFAULT_GALERIA = [];
 const DEFAULT_PORTFOLIO = [
   { id:'p1', url:'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=900&auto=format&fit=crop', category:'Boda', caption:'Ceremonia · luz natural' },
   { id:'p2', url:'https://images.unsplash.com/photo-1552058544-f2b08422138a?q=80&w=900&auto=format&fit=crop', category:'Retrato', caption:'Retrato de estudio' },
@@ -501,11 +505,13 @@ async function sha256(text){
 
 let state = {
   content: null, design: null, portfolio: null,
+  galeria: null,          // fotos de la página pública "Galería", por bloques de categoría fija
   view: 'public', // public | admin-login | admin | gallery
   isAdmin: false,
   adminTab: 'contenido',
   activeFilter: 'Todas',
   lightbox: null,
+  lightboxG: null,        // índice de lightbox para la página "Galería" (independiente del de Portafolio)
   galleryId: null,
   galleryData: null,
   saveMsg: '',
@@ -646,15 +652,16 @@ async function loadInitial(){
   const g = params.get('g');
   const adminParam = params.has('admin');
 
-  let [content, design, portfolio] = await Promise.all([
-    STORAGE.get('site:content'), STORAGE.get('site:design'), STORAGE.get('site:portfolio')
+  let [content, design, portfolio, galeria] = await Promise.all([
+    STORAGE.get('site:content'), STORAGE.get('site:design'), STORAGE.get('site:portfolio'), STORAGE.get('site:galeria')
   ]);
   if(!content){ content = DEFAULT_CONTENT; await STORAGE.set('site:content', content); }
   else if(!content.calendlyLink){ content = {...DEFAULT_CONTENT, ...content, calendlyLink: DEFAULT_CONTENT.calendlyLink}; await STORAGE.set('site:content', content); }
   if(!design){ design = DEFAULT_DESIGN; await STORAGE.set('site:design', design); }
   if(!portfolio){ portfolio = DEFAULT_PORTFOLIO; await STORAGE.set('site:portfolio', portfolio); }
+  if(!galeria){ galeria = DEFAULT_GALERIA; await STORAGE.set('site:galeria', galeria); }
 
-  state.content = content; state.design = design; state.portfolio = portfolio;
+  state.content = content; state.design = design; state.portfolio = portfolio; state.galeria = galeria;
   applyDesign(design);
 
   if(g){
@@ -714,6 +721,7 @@ function renderPublic(){
       <a href="#" class="brand">Estudio<span class="dot">·</span>Foto</a>
       <div class="navlinks">
         <a href="#portafolio">Portafolio</a>
+        <a href="#galeria">Galería</a>
         <a href="#sobre-mi">Sobre mí</a>
         <a href="#contacto">Contacto</a>
         <button class="admin-link" data-action="go-admin" title="Acceso administrador">Acceso</button>
@@ -763,6 +771,34 @@ function renderPublic(){
   </section>
 
   <div class="sprockets"></div>
+  <section id="galeria">
+    <div class="wrap">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">Colección personal</div>
+          <h2 class="section-title">Galería</h2>
+        </div>
+      </div>
+      ${GALERIA_CATEGORIES.map(cat=>{
+        const catPhotos = state.galeria.filter(p=>p.category===cat);
+        if(!catPhotos.length) return '';
+        return `
+        <div style="margin:30px 0 14px;">
+          <h3 class="admin-h" style="font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--accent);">${escapeHtml(cat)}</h3>
+        </div>
+        <div class="contact-sheet">
+          ${catPhotos.map(p=>`
+            <div class="frame" data-action="open-galeria-lightbox" data-idx="${state.galeria.indexOf(p)}">
+              <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" loading="lazy" style="filter:${cssFilterFor(p)}">
+              <div class="frame-cap">${escapeHtml(p.caption||'')}</div>
+            </div>
+          `).join('')}
+        </div>`;
+      }).join('') || `<div class="empty-state">Todavía no hay fotos en la Galería.</div>`}
+    </div>
+  </section>
+
+  <div class="sprockets"></div>
   <section id="sobre-mi">
     <div class="wrap about">
       <img src="${c.aboutImage}" alt="Foto del fotógrafo">
@@ -800,7 +836,19 @@ function renderPublic(){
   </footer>
 
   ${state.lightbox !== null ? renderLightbox() : ''}
+  ${state.lightboxG !== null ? renderGaleriaLightbox() : ''}
   `;
+}
+
+function renderGaleriaLightbox(){
+  const p = state.galeria[state.lightboxG];
+  if(!p) return '';
+  return `
+  <div class="lightbox" data-action="close-galeria-lightbox">
+    <button class="lightbox-close" data-action="close-galeria-lightbox">✕</button>
+    <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
+    <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
+  </div>`;
 }
 
 function renderLightbox(){
@@ -907,6 +955,7 @@ function renderAdmin(){
         ${tabBtn('contenido','Contenido')}
         ${tabBtn('diseno','Diseño')}
         ${tabBtn('portafolio','Portafolio')}
+        ${tabBtn('galeria','Galería')}
         ${tabBtn('galerias','Galerías de clientes')}
         ${tabBtn('cuenta','Cuenta')}
       </nav>
@@ -914,6 +963,7 @@ function renderAdmin(){
         ${state.adminTab==='contenido' ? adminContenido() : ''}
         ${state.adminTab==='diseno' ? adminDiseno() : ''}
         ${state.adminTab==='portafolio' ? adminPortafolio() : ''}
+        ${state.adminTab==='galeria' ? adminGaleria() : ''}
         ${state.adminTab==='galerias' ? adminGalerias() : ''}
         ${state.adminTab==='cuenta' ? adminCuenta() : ''}
       </div>
@@ -1050,6 +1100,67 @@ https://otra-liga.com/foto.jpg" oninput="window.__previewMultiUrl('np-urls','np-
   `;
 }
 
+function adminGaleria(){
+  const items = state.galeria;
+  return `
+  <div class="admin-h">Página pública "Galería" — colección personal por tipo</div>
+  <h1 class="admin-title">Galería</h1>
+
+  <div class="card">
+    <div class="admin-h" style="margin-bottom:14px;">Agregar fotos (una o varias a la vez)</div>
+    <div class="field"><label>Categoría</label>
+      <select id="ng2-category">
+        ${GALERIA_CATEGORIES.map(cat=>`<option value="${escapeHtml(cat)}">${escapeHtml(cat)}</option>`).join('')}
+      </select></div>
+
+    <div class="field"><label>Ligas de imágenes — una por línea (URL directa o de Google Drive)</label>
+      <textarea id="ng2-urls" style="min-height:110px;" placeholder="https://drive.google.com/file/d/.../view
+https://drive.google.com/file/d/.../view
+https://otra-liga.com/foto.jpg" oninput="window.__previewMultiUrl('ng2-urls','ng2-preview')"></textarea></div>
+    <div id="ng2-preview" style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px;"></div>
+
+    <div class="field">
+      <label>O elige varias fotos directo de tu Google Drive (recomendado)</label>
+      <button type="button" class="btn-ghost" onclick="window.__openDrivePicker('galeria')">📁 Elegir desde Google Drive</button>
+      <p class="hint">${driveConnected()
+        ? (PICKER_ENABLED ? 'Se abre una ventana para navegar tu Drive y seleccionar varias fotos con clic — nada de copiar ligas.' : 'Falta configurar la Clave de API del selector. Sigue la guía "picker-y-ia.md".')
+        : 'Conecta Google Drive primero (botón arriba en el panel) para poder usar esta opción.'}</p>
+    </div>
+
+    <div class="field">
+      <label>O sube varios archivos desde tu equipo (selecciona varios con Ctrl/Cmd, o arrastra)</label>
+      <input type="file" id="ng2-file" accept="image/*" multiple>
+      <p class="hint">${driveConnected()
+        ? 'Conectado a Google Drive ✓ — estos archivos se subirán directo a tu carpeta "EstudioFoto / Galería" en Drive, en alta resolución, y se compartirán automáticamente.'
+        : 'Se comprimen automáticamente y quedan guardados dentro del sitio — útil para probar rápido. Conecta Google Drive (botón arriba) para subir en alta resolución de verdad.'}</p>
+    </div>
+    <button class="btn-dark" data-action="add-galeria-photo">Añadir a la Galería</button>
+  </div>
+
+  <div class="admin-h" style="margin-top:30px;">Fotos actuales (${items.length})</div>
+  <button class="btn-ghost" style="margin-bottom:14px;" onclick="window.__autoCaptionAll('galeria')">✨ Generar descripciones automáticas para las fotos sin descripción</button>
+
+  ${GALERIA_CATEGORIES.map(cat=>{
+    const catPhotos = items.filter(p=>p.category===cat);
+    return `
+    <div class="admin-h" style="margin-top:20px; color:var(--accent);">${escapeHtml(cat)} (${catPhotos.length})</div>
+    ${catPhotos.length ? catPhotos.map(p=>`
+      <div class="thumb-row">
+        <img src="${normalizeImageUrl(p.url) || p.url}" alt="" style="filter:${cssFilterFor(p)}">
+        <div class="thumb-meta">
+          <div class="cap">${escapeHtml(p.caption||'(sin descripción)')}</div>
+        </div>
+        <div class="thumb-actions">
+          <a class="icon-btn" href="${normalizeImageUrl(p.url) || p.url}" download target="_blank" rel="noopener" title="Descargar / abrir">⭳</a>
+          <button class="icon-btn" data-action="edit-photo" data-scope="galeria" data-id="${p.id}" title="Editar y retocar">✎</button>
+          <button class="icon-btn danger" data-action="delete-galeria-photo" data-id="${p.id}" title="Eliminar">✕</button>
+        </div>
+      </div>
+    `).join('') : '<p class="hint">Aún no hay fotos en este bloque.</p>'}`;
+  }).join('')}
+  `;
+}
+
 function adminGalerias(){
   if(state.galleryDetailId){
     return renderGalleryDetail(state.galleryDetailId);
@@ -1115,6 +1226,11 @@ function renderPhotoEditor(){
         ${ep.scope==='portfolio' ? `
         <div class="field"><label>Categoría</label>
           <input type="text" id="ep-category" value="${escapeHtml(p.category||'')}"></div>` : ''}
+        ${ep.scope==='galeria' ? `
+        <div class="field"><label>Categoría</label>
+          <select id="ep-category">
+            ${GALERIA_CATEGORIES.map(cat=>`<option value="${escapeHtml(cat)}" ${p.category===cat?'selected':''}>${escapeHtml(cat)}</option>`).join('')}
+          </select></div>` : ''}
         <div class="field"><label>Descripción</label>
           <input type="text" id="ep-caption" value="${escapeHtml(p.caption||'')}"></div>
         <button type="button" class="btn-ghost" onclick="window.__editorAutoCaption()">✨ Generar descripción con IA</button>
@@ -1158,6 +1274,7 @@ function renderPhotoEditor(){
 
 function findPhotoForEdit(scope, id, galleryId){
   if(scope==='portfolio') return state.portfolio.find(p=>p.id===id);
+  if(scope==='galeria') return state.galeria.find(p=>p.id===id);
   const g = (state.galleries||[]).find(g=>g.id===galleryId);
   return g ? g.photos.find(p=>p.id===id) : null;
 }
@@ -1254,7 +1371,9 @@ window.__editorAutoCaption = async function(){
 /* Construye la "referencia" que el backend usa para saber dónde guardar
    la descripción de vuelta: en qué foto, de qué galería (o del portafolio). */
 function refFor(scope, photoId, galleryId){
-  return scope === 'portfolio' ? `portfolio:${photoId}` : `gallery:${galleryId}:${photoId}`;
+  if(scope === 'portfolio') return `portfolio:${photoId}`;
+  if(scope === 'galeria') return `galeria:${photoId}`;
+  return `gallery:${galleryId}:${photoId}`;
 }
 
 /* Genera descripciones para todas las fotos de un contexto que aún no tienen una.
@@ -1266,7 +1385,7 @@ window.__autoCaptionAll = async function(scope, galleryId){
   if(state.captionJob){ alert('Ya hay una generación de descripciones en curso — espera a que termine antes de iniciar otra.'); return; }
   if(!STORAGE_AVAILABLE){ alert('Esto requiere el backend de Google Sheets conectado.'); return; }
 
-  const photos = scope === 'portfolio' ? state.portfolio : (state.galleries.find(g=>g.id===galleryId) || {photos:[]}).photos;
+  const photos = scope === 'portfolio' ? state.portfolio : scope === 'galeria' ? state.galeria : (state.galleries.find(g=>g.id===galleryId) || {photos:[]}).photos;
   const pending = photos.filter(p => !p.caption || !p.caption.trim());
   if(!pending.length){ alert('Todas las fotos de esta sección ya tienen descripción.'); return; }
   if(!confirm(`Se enviarán ${pending.length} foto(s) a un proceso en segundo plano en tu backend (a un ritmo de unas 3 por minuto, para no exceder los límites de Gemini). Puedes cerrar el sitio — seguirá trabajando solo. ¿Continuar?`)) return;
@@ -1292,7 +1411,7 @@ window.__autoCaptionAll = async function(scope, galleryId){
 
   state.captionJob = {
     batchId: enqueueResult.batchId,
-    label: scope === 'portfolio' ? 'Portafolio' : 'Galería',
+    label: scope === 'portfolio' ? 'Portafolio' : scope === 'galeria' ? 'Galería' : 'Galería de cliente',
     scope, galleryId,
     total: enqueueResult.queued, done: 0, errors: 0
   };
@@ -1332,6 +1451,8 @@ async function pollCaptionJob(){
       state.captionJob = null;
       if(summary.scope === 'portfolio'){
         state.portfolio = (await STORAGE.get('site:portfolio')) || state.portfolio;
+      } else if(summary.scope === 'galeria'){
+        state.galeria = (await STORAGE.get('site:galeria')) || state.galeria;
       } else {
         const fresh = await STORAGE.get('gallery:' + summary.galleryId);
         if(fresh){
@@ -1379,6 +1500,11 @@ window.__editorSave = async function(){
     state.editingPhoto = null;
     render(); // optimista: se ve al instante
     STORAGE.set('site:portfolio', state.portfolio); // se guarda en segundo plano
+  } else if(ep.scope === 'galeria'){
+    state.galeria = state.galeria.map(p => p.id === updated.id ? updated : p);
+    state.editingPhoto = null;
+    render();
+    STORAGE.set('site:galeria', state.galeria);
   } else {
     const g = (state.galleries||[]).find(g=>g.id===ep.galleryId);
     if(g){
@@ -1428,6 +1554,8 @@ async function onAction(e){
   if(action==='open-lightbox'){ state.lightbox = parseInt(d.idx,10); render(); }
   if(action==='open-gallery-lightbox'){ state.lightbox = parseInt(d.idx,10); render(); }
   if(action==='close-lightbox' && e.target===e.currentTarget){ state.lightbox = null; render(); }
+  if(action==='open-galeria-lightbox'){ state.lightboxG = parseInt(d.idx,10); render(); }
+  if(action==='close-galeria-lightbox' && e.target===e.currentTarget){ state.lightboxG = null; render(); }
 
   if(action==='edit-photo'){ openPhotoEditor(d.scope, d.id, d.galleryId); }
   if(action==='close-editor' && e.target===e.currentTarget){ state.editingPhoto = null; render(); }
@@ -1507,6 +1635,34 @@ async function onAction(e){
     state.portfolio = state.portfolio.filter(p=>p.id!==d.id);
     render();
     STORAGE.set('site:portfolio', state.portfolio);
+  }
+
+  if(action==='add-galeria-photo'){
+    const category = document.getElementById('ng2-category').value;
+    const urlsRaw = document.getElementById('ng2-urls').value.split('\n').map(l=>l.trim()).filter(Boolean);
+    const fileInput = document.getElementById('ng2-file');
+    const files = Array.from(fileInput.files || []);
+
+    if(!urlsRaw.length && !files.length){ alert('Pega al menos una liga o selecciona al menos un archivo.'); return; }
+
+    const newPhotos = [];
+    for(const raw of urlsRaw){
+      newPhotos.push({ id: uid(), url: normalizeImageUrl(raw), category, caption: '', adjust: {...DEFAULT_ADJUST} });
+    }
+    for(const file of files){
+      const finalUrl = await smartUploadFile(file, ['EstudioFoto', 'Galería']); // se procesan una por una
+      newPhotos.push({ id: uid(), url: finalUrl, category, caption: '', adjust: {...DEFAULT_ADJUST} });
+    }
+
+    state.galeria = [...state.galeria, ...newPhotos];
+    render(); // se ven al instante en la lista, todas juntas
+    STORAGE.set('site:galeria', state.galeria); // se guardan en segundo plano
+  }
+
+  if(action==='delete-galeria-photo'){
+    state.galeria = state.galeria.filter(p=>p.id!==d.id);
+    render();
+    STORAGE.set('site:galeria', state.galeria);
   }
 
   if(action==='create-gallery'){
@@ -1682,6 +1838,13 @@ async function onDrivePickerResult(data, targetType, targetId){
     state.portfolio = [...state.portfolio, ...newEntries];
     render();
     STORAGE.set('site:portfolio', state.portfolio);
+  } else if(targetType === 'galeria'){
+    const categoryEl = document.getElementById('ng2-category');
+    const category = (categoryEl && categoryEl.value) || GALERIA_CATEGORIES[0];
+    newEntries.forEach(p => p.category = category);
+    state.galeria = [...state.galeria, ...newEntries];
+    render();
+    STORAGE.set('site:galeria', state.galeria);
   } else if(targetType === 'gallery'){
     const g = state.galleries.find(g => g.id === targetId);
     if(!g) return;
