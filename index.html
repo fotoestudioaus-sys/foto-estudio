@@ -888,6 +888,7 @@ function renderGallery(){
       <div class="gallery-meta">${g.photos.length} fotografías · disponible hasta ${fmtDate(g.expiresAt)}</div>
       ${g.photos.length ? `<div style="margin-top:18px;">
         <button class="btn solid" id="dl-all-btn" onclick="window.__downloadAllPhotos()">⭳ Descargar todas las fotografías (alta calidad)</button>
+        <button class="btn" id="dl-zip-btn" onclick="window.__downloadZip()">🗜 Descargar en ZIP</button>
         <p class="hint" id="dl-all-status" style="margin-top:10px;">Se descargan una por una en su tamaño original. Si tu navegador pregunta si permites descargas múltiples, acepta.</p>
       </div>` : ''}
     </div>
@@ -2181,6 +2182,95 @@ window.__downloadAllPhotos = async function(){
   if(status) status.textContent = `Listo: se iniciaron ${photos.length} descargas. Revisa tu carpeta de Descargas.`;
   if(btn) btn.disabled = false;
   downloadingAll = false;
+};
+
+/* ---- Descarga en ZIP ----
+   Las fotos de Drive pasan por el backend (Google bloquea leerlas directo desde el
+   navegador). Se arman ZIPs de hasta ZIP_CHUNK fotos para no saturar la memoria
+   del dispositivo del cliente. */
+const ZIP_CHUNK = 20;
+function b64ToUint8(b64){
+  const bin = atob(b64); const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+function extFromMime(m){
+  if(!m) return 'jpg';
+  if(m.includes('png')) return 'png';
+  if(m.includes('webp')) return 'webp';
+  if(m.includes('gif')) return 'gif';
+  return 'jpg';
+}
+async function fetchPhotoBytes(photo){
+  const url = photo.url || '';
+  if(url.startsWith('data:')){
+    const m = url.match(/^data:([^;]+);base64,(.*)$/);
+    if(m) return { bytes: b64ToUint8(m[2]), ext: extFromMime(m[1]) };
+    throw new Error('formato no soportado');
+  }
+  if(url.includes('drive.google.com')){
+    const id = fileIdFromDriveUrl(url);
+    if(!id) throw new Error('liga de Drive sin ID');
+    const res = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'fetchPhoto', fileId: id, secret: APP_SECRET })
+    });
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    return { bytes: b64ToUint8(data.base64), ext: extFromMime(data.mime) };
+  }
+  const res = await fetch(url); // otras URLs: solo funciona si el sitio permite CORS
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const blob = await res.blob();
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: extFromMime(blob.type) };
+}
+let zipping = false;
+window.__downloadZip = async function(){
+  if(zipping || !state.galleryData) return;
+  const photos = state.galleryData.photos;
+  if(!photos.length) return;
+  const parts = Math.ceil(photos.length / ZIP_CHUNK);
+  if(!confirm(`Se prepararán ${photos.length} fotografía(s) en ${parts} archivo(s) ZIP de hasta ${ZIP_CHUNK} fotos cada uno. Puede tardar varios minutos y debes mantener esta pestaña abierta. ¿Continuar?`)) return;
+  zipping = true;
+  const btn = document.getElementById('dl-zip-btn');
+  const status = document.getElementById('dl-all-status');
+  if(btn) btn.disabled = true;
+  try{
+    await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+  } catch(e){
+    if(status) status.textContent = 'No se pudo cargar el compresor ZIP. Revisa tu conexión e intenta de nuevo.';
+    if(btn) btn.disabled = false; zipping = false; return;
+  }
+  const baseName = (state.galleryData.name || 'galeria').replace(/[^\w\-]+/g,'_');
+  const failed = [];
+  for(let part=0; part<parts; part++){
+    const zip = new JSZip();
+    const start = part*ZIP_CHUNK, end = Math.min(start+ZIP_CHUNK, photos.length);
+    for(let i=start; i<end; i++){
+      if(status) status.textContent = `Parte ${part+1} de ${parts}: preparando foto ${i+1} de ${photos.length}… no cierres esta pestaña.`;
+      try{
+        const { bytes, ext } = await fetchPhotoBytes(photos[i]);
+        zip.file(`${baseName}_${String(i+1).padStart(3,'0')}.${ext}`, bytes);
+      } catch(e){
+        console.error('Foto omitida', i+1, e);
+        failed.push(i+1);
+      }
+    }
+    if(!Object.keys(zip.files).length) continue;
+    if(status) status.textContent = `Parte ${part+1} de ${parts}: comprimiendo…`;
+    const blob = await zip.generateAsync({ type:'blob', compression:'STORE' }); // fotos ya vienen comprimidas
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = parts > 1 ? `${baseName}_parte${part+1}de${parts}.zip` : `${baseName}.zip`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href), 60000);
+    await new Promise(r=>setTimeout(r, 1200));
+  }
+  if(status) status.textContent = failed.length
+    ? `Listo, pero ${failed.length} foto(s) no se pudieron incluir (n.º ${failed.slice(0,15).join(', ')}${failed.length>15?'…':''}). Usa "Descargar todas" para esas.`
+    : `Listo: ${parts} archivo(s) ZIP descargados. Revisa tu carpeta de Descargas.`;
+  if(btn) btn.disabled = false;
+  zipping = false;
 };
 
 /* init */
