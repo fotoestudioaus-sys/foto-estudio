@@ -408,6 +408,94 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'; // solo archiv
 const PICKER_API_KEY = 'AIzaSyBd1LkxVXFcpkEkORY3ekpa9WXqMzEHnGE';
 const PICKER_ENABLED = !!PICKER_API_KEY && !PICKER_API_KEY.includes('PEGA_AQUI');
 
+let _lastSaveAlert = 0;
+function notifySaveError(e){
+  if(Date.now() - _lastSaveAlert < 8000) return; // no repetir el aviso varias veces seguidas
+  _lastSaveAlert = Date.now();
+  alert('No se pudo guardar el último cambio en tu hoja de Google Sheets (' + (e && e.message ? e.message : 'error desconocido') + '). Se ve en pantalla, pero NO quedó guardado. Si el problema continúa, avísame con este mensaje.');
+}
+
+/* ---- Ventana de progreso (subidas y guardados largos) ---- */
+function progressStart(title){
+  const old = document.getElementById('prog-overlay'); if(old) old.remove();
+  const el = document.createElement('div');
+  el.id = 'prog-overlay'; el.className = 'zip-overlay';
+  el.innerHTML = `<div class="zip-box">
+    <div class="zip-spinner" id="prog-spinner"></div>
+    <h3 id="prog-title">${title}</h3>
+    <div id="prog-pct" style="font-family:var(--f-mono); font-size:34px; color:var(--accent); margin:6px 0;">0%</div>
+    <div class="zip-bar"><div id="prog-bar"></div></div>
+    <p id="prog-detail" style="font-family:var(--f-mono); font-size:12px; white-space:pre-line;"></p>
+    <p id="prog-warn"><strong>No cierres ni recargues esta pestaña hasta que termine.</strong></p>
+    <button class="btn" id="prog-close" style="display:none; margin-top:14px;" onclick="document.getElementById('prog-overlay').remove()">Cerrar</button>
+  </div>`;
+  document.body.appendChild(el);
+}
+function progressUpdate(done, total, detail, title){
+  const pct = total ? Math.min(100, (done/total)*100) : 0;
+  const a = document.getElementById('prog-pct'); if(a) a.textContent = Math.round(pct) + '%';
+  const b = document.getElementById('prog-bar'); if(b) b.style.width = pct + '%';
+  const d = document.getElementById('prog-detail'); if(d) d.textContent = detail !== undefined ? detail : `${done} de ${total}`;
+  if(title){ const t = document.getElementById('prog-title'); if(t) t.textContent = title; }
+}
+function progressFinish(title, detail){
+  const sp = document.getElementById('prog-spinner'); if(sp) sp.style.display = 'none';
+  const w = document.getElementById('prog-warn'); if(w) w.style.display = 'none';
+  const t = document.getElementById('prog-title'); if(t) t.textContent = title;
+  const d = document.getElementById('prog-detail'); if(d) d.textContent = detail || '';
+  const c = document.getElementById('prog-close'); if(c) c.style.display = 'inline-block';
+}
+/* Ejecuta tareas con varias a la vez (concurrency), conservando el orden de resultados. */
+async function runPool(items, worker, concurrency, onProgress){
+  const results = new Array(items.length);
+  let next = 0, done = 0;
+  async function lane(){
+    while(true){
+      const i = next++;
+      if(i >= items.length) return;
+      try{ results[i] = { ok:true, value: await worker(items[i], i) }; }
+      catch(e){ results[i] = { ok:false, error:e }; }
+      done++;
+      if(onProgress) onProgress(done, items.length);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, lane));
+  return results;
+}
+function failedSummary(names, expired){
+  if(!names.length) return '';
+  return `\n\n⚠ ${names.length} no se pudieron subir:\n${names.slice(0,8).join('\n')}${names.length>8?`\n… y ${names.length-8} más`:''}` +
+    (expired ? '\n\nTu conexión con Google Drive expiró (dura ~1 hora). Vuelve a pulsar "Conectar Google Drive" y sube solo esas fotos.' : '');
+}
+/* Sube archivos con porcentaje. Devuelve { items:[{name,url}], failed:[nombres], expired } o null si se bloqueó. */
+async function uploadFilesWithProgress(files, folderPathNames){
+  if(!files.length) return { items:[], failed:[], expired:false };
+  if(!driveConnected() && files.length > 15){
+    alert('Sin Google Drive conectado las fotos se guardan comprimidas dentro del sitio, y no es viable para más de 15 a la vez. Conecta Google Drive (botón arriba en el panel) para subir muchas fotos.');
+    return null;
+  }
+  progressStart(`Subiendo ${files.length} foto(s)…`);
+  progressUpdate(0, files.length);
+  const results = await runPool(files, f=>smartUploadFile(f, folderPathNames), driveConnected() ? 3 : 2,
+    (d,t)=>progressUpdate(d, t, `Subidas ${d} de ${t}`));
+  const items = [], failed = []; let expired = false;
+  results.forEach((r,i)=>{
+    if(r.ok) items.push({ name: files[i].name, url: r.value });
+    else { failed.push(files[i].name); if(r.error && r.error.message === 'SESION_DRIVE_EXPIRADA') expired = true; }
+  });
+  return { items, failed, expired };
+}
+/* Guarda y cierra la ventana de progreso con un resumen. */
+async function saveAndFinish(saveFn, addedCount, failed, expired, extraNote){
+  progressUpdate(100, 100, 'Guardando en tu hoja de Google Sheets…', 'Guardando…');
+  const ok = await saveFn();
+  if(ok === false){
+    progressFinish('No se pudo guardar', 'Las fotos se ven en pantalla pero NO quedaron guardadas en tu hoja. Intenta de nuevo en un momento.' + failedSummary(failed, expired));
+  } else {
+    progressFinish(failed.length ? 'Listo, con avisos' : '¡Listo!', `Se agregaron ${addedCount} foto(s) y quedaron guardadas ✓` + (extraNote||'') + failedSummary(failed, expired));
+  }
+}
+
 const STORAGE = {
   async get(key, shared=true){
     if(!STORAGE_AVAILABLE) return null;
@@ -417,16 +505,22 @@ const STORAGE = {
       return (data && data.value !== null && data.value !== undefined && data.value !== '') ? JSON.parse(data.value) : null;
     } catch(e){ console.error('Error leyendo', key, e); return null; }
   },
-  async set(key, value, shared=true){
+  async set(key, value, shared=true, quiet=false){
     if(!STORAGE_AVAILABLE) return null;
     try{
-      await fetch(API_URL, {
+      const res = await fetch(API_URL, {
         method:'POST',
         headers:{'Content-Type':'text/plain;charset=utf-8'},
         body: JSON.stringify({ action:'set', key, value: JSON.stringify(value), secret: APP_SECRET })
       });
+      const data = await res.json();
+      if(!data || !data.ok) throw new Error((data && data.error) || 'respuesta inesperada del backend');
       return true;
-    } catch(e){ console.error('Error guardando', key, e); return null; }
+    } catch(e){
+      console.error('Error guardando', key, e);
+      if(!quiet) notifySaveError(e);
+      return false;
+    }
   },
   async delete(key, shared=true){
     if(!STORAGE_AVAILABLE) return null;
@@ -1098,6 +1192,14 @@ https://otra-liga.com/foto.jpg" oninput="window.__previewMultiUrl('np-urls','np-
         : 'Conecta Google Drive primero (botón arriba en el panel) para poder usar esta opción.'}</p>
     </div>
 
+
+    <div class="field">
+      <label>O pega la liga de una carpeta de Google Drive y se agregan todas sus fotos</label>
+      <input type="url" id="np-folder" placeholder="https://drive.google.com/drive/folders/...">
+      <label style="display:flex; gap:8px; align-items:center; margin:8px 0; text-transform:none; letter-spacing:0;"><input type="checkbox" id="np-folder-sub" style="width:auto;"> Incluir también las fotos de las subcarpetas</label>
+      <button type="button" class="btn-ghost" onclick="window.__addFolder('portfolio')">📂 Agregar todas las fotos de la carpeta</button>
+      <p class="hint">No necesitas conectar Drive para esto. La carpeta debe ser tuya (o estar compartida contigo); el sitio la deja como "Cualquier persona con el enlace" (solo lectura) para que las fotos se vean.</p>
+    </div>
     <div class="field">
       <label>O sube varios archivos desde tu equipo (selecciona varios con Ctrl/Cmd, o arrastra)</label>
       <input type="file" id="np-file" accept="image/*" multiple>
@@ -1154,6 +1256,14 @@ https://otra-liga.com/foto.jpg" oninput="window.__previewMultiUrl('ng2-urls','ng
         : 'Conecta Google Drive primero (botón arriba en el panel) para poder usar esta opción.'}</p>
     </div>
 
+
+    <div class="field">
+      <label>O pega la liga de una carpeta de Google Drive y se agregan todas sus fotos</label>
+      <input type="url" id="ng2-folder" placeholder="https://drive.google.com/drive/folders/...">
+      <label style="display:flex; gap:8px; align-items:center; margin:8px 0; text-transform:none; letter-spacing:0;"><input type="checkbox" id="ng2-folder-sub" style="width:auto;"> Incluir también las fotos de las subcarpetas</label>
+      <button type="button" class="btn-ghost" onclick="window.__addFolder('galeria')">📂 Agregar todas las fotos de la carpeta</button>
+      <p class="hint">No necesitas conectar Drive para esto. La carpeta debe ser tuya (o estar compartida contigo); el sitio la deja como "Cualquier persona con el enlace" (solo lectura) para que las fotos se vean.</p>
+    </div>
     <div class="field">
       <label>O sube varios archivos desde tu equipo (selecciona varios con Ctrl/Cmd, o arrastra)</label>
       <input type="file" id="ng2-file" accept="image/*" multiple>
@@ -1648,14 +1758,17 @@ async function onAction(e){
     for(const raw of urlsRaw){
       newPhotos.push({ id: uid(), url: normalizeImageUrl(raw), category, caption: '', adjust: {...DEFAULT_ADJUST} });
     }
-    for(const file of files){
-      const finalUrl = await smartUploadFile(file, ['EstudioFoto', 'Portafolio']); // se procesan una por una
-      newPhotos.push({ id: uid(), url: finalUrl, category, caption: '', adjust: {...DEFAULT_ADJUST} });
-    }
+    const up = await uploadFilesWithProgress(files, ['EstudioFoto', 'Portafolio']);
+    if(up === null) return;
+    up.items.forEach(it => newPhotos.push({ id: uid(), url: it.url, category, caption: '', adjust: {...DEFAULT_ADJUST} }));
 
     state.portfolio = [...state.portfolio, ...newPhotos];
     render(); // se ven al instante en la lista, todas juntas
-    STORAGE.set('site:portfolio', state.portfolio); // se guardan en segundo plano
+    if(files.length){
+      await saveAndFinish(()=>STORAGE.set('site:portfolio', state.portfolio, true, true), newPhotos.length, up.failed, up.expired);
+    } else {
+      STORAGE.set('site:portfolio', state.portfolio);
+    }
   }
 
   if(action==='delete-photo'){
@@ -1676,14 +1789,17 @@ async function onAction(e){
     for(const raw of urlsRaw){
       newPhotos.push({ id: uid(), url: normalizeImageUrl(raw), category, caption: '', adjust: {...DEFAULT_ADJUST} });
     }
-    for(const file of files){
-      const finalUrl = await smartUploadFile(file, ['EstudioFoto', 'Galería']); // se procesan una por una
-      newPhotos.push({ id: uid(), url: finalUrl, category, caption: '', adjust: {...DEFAULT_ADJUST} });
-    }
+    const up = await uploadFilesWithProgress(files, ['EstudioFoto', 'Galería']);
+    if(up === null) return;
+    up.items.forEach(it => newPhotos.push({ id: uid(), url: it.url, category, caption: '', adjust: {...DEFAULT_ADJUST} }));
 
     state.galeria = [...state.galeria, ...newPhotos];
     render(); // se ven al instante en la lista, todas juntas
-    STORAGE.set('site:galeria', state.galeria); // se guardan en segundo plano
+    if(files.length){
+      await saveAndFinish(()=>STORAGE.set('site:galeria', state.galeria, true, true), newPhotos.length, up.failed, up.expired);
+    } else {
+      STORAGE.set('site:galeria', state.galeria);
+    }
   }
 
   if(action==='delete-galeria-photo'){
@@ -1841,53 +1957,152 @@ async function onDrivePickerResult(data, targetType, targetId){
   const docs = data.docs || [];
   if(!docs.length) return;
 
-  const newEntries = [];
-  const shareFailed = []; // nombres de archivos que Google rechazó compartir
-  for(const doc of docs){
-    let shared = false;
-    try{
-      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${doc.id}/permissions`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'reader', type: 'anyone' })
-      });
-      shared = res.ok; // fetch() NO lanza error por un 403 — hay que revisar res.ok explícitamente
-      if(!shared) console.error('Drive rechazó compartir', doc.name, res.status, await res.text());
-    } catch(e){ console.error('No se pudo compartir', doc.name, e); }
-    if(!shared) shareFailed.push(doc.name);
-    newEntries.push({ id: uid(), url: `https://drive.google.com/thumbnail?id=${doc.id}&sz=w2000`, caption: '', adjust: {...DEFAULT_ADJUST} });
-  }
+  progressStart(`Preparando ${docs.length} foto(s) de Drive…`);
+  progressUpdate(0, docs.length);
+  const shareResults = await runPool(docs, async (doc)=>{
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${doc.id}/permissions`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' })
+    });
+    // fetch() NO lanza error por un 403 — hay que revisar res.ok explícitamente
+    if(!res.ok){ console.error('Drive rechazó compartir', doc.name, res.status); throw new Error(res.status === 401 ? 'SESION_DRIVE_EXPIRADA' : String(res.status)); }
+    return true;
+  }, 5, (d,t)=>progressUpdate(d, t, `Compartiendo ${d} de ${t}`));
 
+  const newEntries = [];
+  const shareFailed = [];
+  let expired = false;
+  docs.forEach((doc,i)=>{
+    if(!shareResults[i].ok){
+      shareFailed.push(doc.name);
+      if(shareResults[i].error && shareResults[i].error.message === 'SESION_DRIVE_EXPIRADA') expired = true;
+    }
+    newEntries.push({ id: uid(), url: `https://drive.google.com/thumbnail?id=${doc.id}&sz=w2000`, caption: '', adjust: {...DEFAULT_ADJUST} });
+  });
+
+  let saveFn;
   if(targetType === 'portfolio'){
     const categoryEl = document.getElementById('np-category');
     const category = (categoryEl && categoryEl.value.trim()) || 'General';
     newEntries.forEach(p => p.category = category);
     state.portfolio = [...state.portfolio, ...newEntries];
     render();
-    STORAGE.set('site:portfolio', state.portfolio);
+    saveFn = ()=>STORAGE.set('site:portfolio', state.portfolio, true, true);
   } else if(targetType === 'galeria'){
     const categoryEl = document.getElementById('ng2-category');
     const category = (categoryEl && categoryEl.value) || GALERIA_CATEGORIES[0];
     newEntries.forEach(p => p.category = category);
     state.galeria = [...state.galeria, ...newEntries];
     render();
-    STORAGE.set('site:galeria', state.galeria);
+    saveFn = ()=>STORAGE.set('site:galeria', state.galeria, true, true);
   } else if(targetType === 'gallery'){
     const g = state.galleries.find(g => g.id === targetId);
-    if(!g) return;
+    if(!g){ progressFinish('Error', 'No se encontró la galería.'); return; }
     g.photos.push(...newEntries);
-    renderGalleriesList();
-    STORAGE.set('gallery:' + targetId, g);
+    render();
+    saveFn = ()=>STORAGE.set('gallery:' + targetId, g, true, true);
+  } else { progressFinish('Error', 'Destino desconocido.'); return; }
+
+  const note = shareFailed.length
+    ? `\n\n⚠ Google no dejó compartir públicamente ${shareFailed.length} foto(s) (posiblemente no eres el propietario original, o viven en una carpeta compartida). NO se verán hasta que las compartas a mano en Drive: selecciónalas → Compartir → "Cualquier persona con el enlace" → Lector.\nArchivos: ${shareFailed.slice(0,8).join(', ')}${shareFailed.length>8?` … y ${shareFailed.length-8} más`:''}` + (expired ? '\n\nTu conexión con Drive expiró (dura ~1 hora): vuelve a conectar.' : '')
+    : '';
+  await saveAndFinish(saveFn, newEntries.length, [], false, note);
+}
+
+/* Agrega todas las fotos de una carpeta de Drive pegando su liga. El backend lee la carpeta. */
+window.__addFolder = async function(targetType, targetId){
+  if(!STORAGE_AVAILABLE){ alert('Esto requiere el backend de Google Sheets conectado.'); return; }
+  const ids = targetType === 'portfolio' ? ['np-folder','np-folder-sub']
+            : targetType === 'galeria' ? ['ng2-folder','ng2-folder-sub']
+            : [`gp-folder-${targetId}`, `gp-folder-sub-${targetId}`];
+  const inputEl = document.getElementById(ids[0]);
+  const recursive = !!(document.getElementById(ids[1]) && document.getElementById(ids[1]).checked);
+  const raw = inputEl ? inputEl.value.trim() : '';
+  const m = raw.match(/folders\/([a-zA-Z0-9_-]+)/) || raw.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+  if(!m){ alert('Pega la liga de una CARPETA de Google Drive (se ve como drive.google.com/drive/folders/…).'); return; }
+
+  progressStart('Leyendo la carpeta de Drive…');
+  progressUpdate(0, 0, 'Buscando fotos… en carpetas grandes puede tardar hasta un minuto.');
+  const pctEl = document.getElementById('prog-pct'); if(pctEl) pctEl.textContent = '…';
+
+  let data;
+  try{
+    const res = await fetch(API_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action:'listFolder', folderId: m[1], recursive, share: true, secret: APP_SECRET })
+    });
+    data = await res.json();
+  } catch(e){
+    progressFinish('No se pudo leer la carpeta', 'No se pudo contactar al backend: ' + e.message);
+    return;
+  }
+  if(!data || data.error){
+    progressFinish('No se pudo leer la carpeta', (data && data.error ? data.error : 'Respuesta inesperada.') +
+      '\n\n¿Ya republicaste el backend y ejecutaste "autorizarDrive" una vez en Apps Script? Revisa las instrucciones.');
+    return;
   }
 
-  if(shareFailed.length){
-    alert(
-      `Se agregaron ${docs.length} foto(s), pero Google no dejó compartir públicamente ${shareFailed.length} de ellas (posiblemente porque no eres el propietario original en Drive, o viven en una carpeta compartida).\n\n` +
-      `Estas fotos NO se van a ver hasta que las compartas a mano: en Google Drive, selecciona esos archivos → Compartir → "Cualquier persona con el enlace" → Lector.\n\n` +
-      `Archivos afectados:\n${shareFailed.slice(0,10).join('\n')}${shareFailed.length>10 ? `\n… y ${shareFailed.length-10} más` : ''}`
-    );
+  // Destino y fotos que ya estaban (para no duplicar si repites la importación)
+  let existing, category;
+  if(targetType === 'portfolio'){
+    existing = state.portfolio;
+    const c = document.getElementById('np-category'); category = (c && c.value.trim()) || 'General';
+  } else if(targetType === 'galeria'){
+    existing = state.galeria;
+    const c = document.getElementById('ng2-category'); category = (c && c.value) || GALERIA_CATEGORIES[0];
+  } else {
+    const g = (state.galleries||[]).find(g=>g.id===targetId);
+    if(!g){ progressFinish('Error', 'No se encontró la galería.'); return; }
+    existing = g.photos;
   }
-}
+  const have = new Set(existing.map(p => fileIdFromDriveUrl(p.url || '')).filter(Boolean));
+  const fresh = data.files.filter(f => !have.has(f.id));
+  const dupes = data.files.length - fresh.length;
+
+  if(!fresh.length){
+    progressFinish('No hay fotos nuevas', data.files.length ? `La carpeta "${data.name}" tiene ${data.files.length} foto(s), pero todas ya estaban agregadas.` : `No se encontraron fotos en la carpeta "${data.name}".` + (!recursive ? '\n\nSi las fotos están en subcarpetas, marca "Incluir también las fotos de las subcarpetas".' : ''));
+    return;
+  }
+  const ov = document.getElementById('prog-overlay'); if(ov) ov.style.display = 'none'; // oculto mientras se confirma
+  if(!confirm(`En la carpeta "${data.name}" se encontraron ${fresh.length} foto(s) nuevas${dupes?` (${dupes} ya estaban agregadas y se omiten)`:''}. ¿Agregarlas?`)){
+    if(ov) ov.remove(); return;
+  }
+  if(ov) ov.style.display = '';
+  progressUpdate(0, 0, 'Preparando…', 'Agregando fotos…');
+
+  const entries = fresh.map(f => ({ id: uid(), url: `https://drive.google.com/thumbnail?id=${f.id}&sz=w2000`, caption: '', adjust: {...DEFAULT_ADJUST} }));
+  if(category !== undefined) entries.forEach(p => p.category = category);
+
+  // Verifica que la primera foto realmente se vea (detecta carpetas que Google no dejó compartir)
+  const visible = await new Promise(resolve => {
+    const img = new Image(); const t = setTimeout(()=>resolve(false), 10000);
+    img.onload = ()=>{ clearTimeout(t); resolve(true); };
+    img.onerror = ()=>{ clearTimeout(t); resolve(false); };
+    img.src = entries[0].url;
+  });
+
+  let saveFn;
+  if(targetType === 'portfolio'){
+    state.portfolio = [...state.portfolio, ...entries]; render();
+    saveFn = ()=>STORAGE.set('site:portfolio', state.portfolio, true, true);
+  } else if(targetType === 'galeria'){
+    state.galeria = [...state.galeria, ...entries]; render();
+    saveFn = ()=>STORAGE.set('site:galeria', state.galeria, true, true);
+  } else {
+    const g = state.galleries.find(g=>g.id===targetId);
+    g.photos.push(...entries); render();
+    saveFn = ()=>STORAGE.set('gallery:'+targetId, g, true, true);
+  }
+
+  let note = '';
+  if(data.truncated) note += '\n\n⚠ La carpeta es muy grande y solo se leyó una parte. Vuelve a pegar la misma liga y se agregarán las que faltan (las ya agregadas se omiten).';
+  if(data.skipped) note += `\n\nSe omitieron ${data.skipped} foto(s) en formato HEIC/HEIF, que los navegadores no pueden mostrar (expórtalas a JPG).`;
+  if(!visible || (data.sharing && data.sharing.indexOf('error') === 0)){
+    note += '\n\n⚠ Puede que estas fotos no se vean todavía: Google no dejó compartir la carpeta automáticamente' + (data.sharing && data.sharing.indexOf('error')===0 ? ` (${data.sharing})` : '') + '. En Drive, abre la carpeta → Compartir → "Cualquier persona con el enlace" → Lector.';
+  }
+  await saveAndFinish(saveFn, entries.length, [], false, note);
+};
 
 /* Busca (o crea) una carpeta de Drive con ese nombre dentro de un padre dado */
 async function getOrCreateDriveFolder(name, parentId){
@@ -1940,6 +2155,7 @@ async function uploadFileToDriveFolder(file, folderId){
     headers: { Authorization: 'Bearer ' + state.driveToken, 'Content-Type': 'multipart/related; boundary=' + boundary },
     body
   });
+  if(res.status === 401){ state.driveToken = null; throw new Error('SESION_DRIVE_EXPIRADA'); }
   const created = await res.json();
   if(!created.id) throw new Error('Drive no aceptó el archivo "' + file.name + '".');
 
@@ -1959,16 +2175,15 @@ async function uploadFileToDriveFolder(file, folderId){
 }
 
 /* Sube un archivo usando Drive si está conectado; si no, cae de vuelta al modo local comprimido */
+const _folderCache = {};
 async function smartUploadFile(file, folderPathNames){
   if(driveConnected()){
-    try{
-      const folderId = await ensureDriveFolderPath(folderPathNames);
-      return await uploadFileToDriveFolder(file, folderId);
-    } catch(e){
-      console.error('Error subiendo a Drive, se usa modo local:', e);
-      alert('No se pudo subir "' + file.name + '" a Google Drive (revisa tu conexión o vuelve a conectar). Se guardó en modo local en su lugar.');
-      return await fileToCompressedDataUrl(file);
-    }
+    // Sin respaldo local: si falla, se lanza el error y quien llama lo reporta al final
+    // (guardar cientos de fotos como datos locales rompería el sitio).
+    const cacheKey = folderPathNames.join('/');
+    if(!_folderCache[cacheKey]) _folderCache[cacheKey] = ensureDriveFolderPath(folderPathNames).catch(e=>{ delete _folderCache[cacheKey]; throw e; });
+    const folderId = await _folderCache[cacheKey];
+    return await uploadFileToDriveFolder(file, folderId);
   }
   return await fileToCompressedDataUrl(file);
 }
@@ -2081,6 +2296,14 @@ https://drive.google.com/file/d/.../view" oninput="window.__previewMultiUrl('gp-
       <div id="gp-preview-${g.id}" style="display:flex; flex-wrap:wrap; gap:10px; margin:10px 0;"></div>
     </div>
     <button type="button" class="btn-ghost" onclick="window.__openDrivePicker('gallery','${g.id}')">📁 Elegir desde Google Drive</button>
+
+    <div class="field">
+      <label>O pega la liga de una carpeta de Google Drive y se agregan todas sus fotos</label>
+      <input type="url" id="gp-folder-${g.id}" placeholder="https://drive.google.com/drive/folders/...">
+      <label style="display:flex; gap:8px; align-items:center; margin:8px 0; text-transform:none; letter-spacing:0;"><input type="checkbox" id="gp-folder-sub-${g.id}" style="width:auto;"> Incluir también las fotos de las subcarpetas</label>
+      <button type="button" class="btn-ghost" onclick="window.__addFolder('gallery','${g.id}')">📂 Agregar todas las fotos de la carpeta</button>
+      <p class="hint">No necesitas conectar Drive para esto. La carpeta debe ser tuya (o estar compartida contigo); el sitio la deja como "Cualquier persona con el enlace" (solo lectura) para que las fotos se vean.</p>
+    </div>
     <div class="field" style="margin-top:14px;">
       <label>O sube varios archivos desde tu equipo</label>
       <input type="file" id="gp-file-${g.id}" accept="image/*" multiple>
@@ -2121,16 +2344,21 @@ window.__addGalleryPhoto = async function(id){
   const g = state.galleries.find(g=>g.id===id);
   if(!g) return;
 
+  let added = 0;
   for(const raw of urlsRaw){
     g.photos.push({ id: uid(), url: normalizeImageUrl(raw), caption: '', adjust: {...DEFAULT_ADJUST} });
+    added++;
   }
-  for(const file of files){
-    const finalUrl = await smartUploadFile(file, ['EstudioFoto', 'Galerías', g.name]);
-    g.photos.push({ id: uid(), url: finalUrl, caption: '', adjust: {...DEFAULT_ADJUST} });
-  }
+  const up = await uploadFilesWithProgress(files, ['EstudioFoto', 'Galerías', g.name]);
+  if(up === null) return;
+  up.items.forEach(it => { g.photos.push({ id: uid(), url: it.url, caption: '', adjust: {...DEFAULT_ADJUST} }); added++; });
 
   render(); // al instante, en la vista que corresponda (lista o detalle)
-  STORAGE.set('gallery:'+id, g); // en segundo plano
+  if(files.length){
+    await saveAndFinish(()=>STORAGE.set('gallery:'+id, g, true, true), added, up.failed, up.expired);
+  } else {
+    STORAGE.set('gallery:'+id, g);
+  }
 };
 window.__deleteGalleryPhoto = function(galleryId, photoId){
   const g = state.galleries.find(g=>g.id===galleryId);
