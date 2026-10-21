@@ -886,6 +886,10 @@ function renderGallery(){
       <div class="eyebrow mono">Galería privada</div>
       <h1>${escapeHtml(g.name)}</h1>
       <div class="gallery-meta">${g.photos.length} fotografías · disponible hasta ${fmtDate(g.expiresAt)}</div>
+      ${g.photos.length ? `<div style="margin-top:18px;">
+        <button class="btn solid" id="dl-all-btn" onclick="window.__downloadAllPhotos()">⭳ Descargar todas las fotografías (alta calidad)</button>
+        <p class="hint" id="dl-all-status" style="margin-top:10px;">Se descargan una por una en su tamaño original. Si tu navegador pregunta si permites descargas múltiples, acepta.</p>
+      </div>` : ''}
     </div>
   </div>
   <div class="wrap">
@@ -908,7 +912,7 @@ function renderGalleryLightbox(){
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
     <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
-    <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} · clic derecho → guardar imagen</div>
+    <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} · <a href="#" style="color:var(--accent);" onclick="event.stopPropagation(); window.__downloadOnePhoto(${state.lightbox}); return false;">⭳ descargar original</a></div>
   </div>`;
 }
 
@@ -2129,6 +2133,54 @@ window.__deleteGallery = function(id){
     const idx = (await STORAGE.get('galleries:index')) || [];
     await STORAGE.set('galleries:index', idx.filter(x=>x!==id));
   })();
+};
+
+/* ---------------------------- DESCARGA DE FOTOS (galería de cliente) ---------------------------- */
+/* Para fotos de Drive se usa el enlace de descarga del archivo ORIGINAL (no la miniatura de 2000 px). */
+function originalDownloadUrl(url){
+  if(url && url.includes('drive.google.com')){
+    const id = fileIdFromDriveUrl(url);
+    if(id) return `https://drive.usercontent.google.com/download?id=${id}&export=download`;
+  }
+  return url;
+}
+function triggerDownload(photo, index){
+  const url = originalDownloadUrl(photo.url);
+  if(!url) return;
+  if(url.startsWith('data:')){
+    const a = document.createElement('a');
+    a.href = url; a.download = `foto-${String(index+1).padStart(3,'0')}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove();
+  } else {
+    // iframe oculto: el servidor responde "attachment" y el navegador descarga sin abrir pestañas
+    const f = document.createElement('iframe');
+    f.style.display = 'none'; f.src = url;
+    document.body.appendChild(f);
+    setTimeout(()=> f.remove(), 60000);
+  }
+}
+window.__downloadOnePhoto = function(idx){
+  const p = state.galleryData && state.galleryData.photos[idx];
+  if(p) triggerDownload(p, idx);
+};
+let downloadingAll = false;
+window.__downloadAllPhotos = async function(){
+  if(downloadingAll || !state.galleryData) return;
+  const photos = state.galleryData.photos;
+  if(!photos.length) return;
+  if(!confirm(`Se descargarán ${photos.length} fotografía(s) en su tamaño original, una tras otra. Puede tardar unos minutos y tu navegador podría pedir permiso para descargas múltiples. ¿Continuar?`)) return;
+  downloadingAll = true;
+  const btn = document.getElementById('dl-all-btn');
+  const status = document.getElementById('dl-all-status');
+  if(btn) btn.disabled = true;
+  for(let i=0; i<photos.length; i++){
+    triggerDownload(photos[i], i);
+    if(status) status.textContent = `Descargando ${i+1} de ${photos.length}… no cierres esta pestaña.`;
+    await new Promise(r=>setTimeout(r, 1500)); // pausa para que el navegador no bloquee las descargas
+  }
+  if(status) status.textContent = `Listo: se iniciaron ${photos.length} descargas. Revisa tu carpeta de Descargas.`;
+  if(btn) btn.disabled = false;
+  downloadingAll = false;
 };
 
 /* init */
