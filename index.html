@@ -183,6 +183,14 @@
     position:absolute; top:24px; right:32px; background:none; border:none; color:#fff; font-size:28px; cursor:pointer;
     font-family:var(--f-mono);
   }
+  .zip-overlay{position:fixed; inset:0; z-index:300; background:rgba(8,9,10,.88); display:flex; align-items:center; justify-content:center; padding:20px;}
+  .zip-box{background:#16181B; border:1px solid var(--accent); border-radius:10px; max-width:440px; width:100%; padding:30px 26px; text-align:center; color:#F2F0E8;}
+  .zip-box h3{font-family:var(--f-display); font-size:24px; margin:14px 0 8px;}
+  .zip-box p{font-size:14px; color:#B9B8AC; margin:6px 0;}
+  .zip-spinner{width:44px; height:44px; margin:0 auto; border:4px solid rgba(255,255,255,.15); border-top-color:var(--accent); border-radius:50%; animation:zipspin 1s linear infinite;}
+  @keyframes zipspin{to{transform:rotate(360deg)}}
+  .zip-bar{height:8px; background:rgba(255,255,255,.12); border-radius:4px; overflow:hidden; margin:18px 0 8px;}
+  .zip-bar > div{height:100%; width:0; background:var(--accent); transition:width .3s;}
   .lightbox-nav{
     position:absolute; top:50%; transform:translateY(-50%); background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.25);
     color:#fff; width:48px; height:48px; border-radius:50%; font-size:22px; cursor:pointer; font-family:var(--f-mono);
@@ -2238,6 +2246,33 @@ async function fetchPhotoBytes(photo){
   const blob = await res.blob();
   return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: extFromMime(blob.type) };
 }
+function showZipOverlay(){
+  let el = document.getElementById('zip-overlay');
+  if(el) return el;
+  el = document.createElement('div');
+  el.id = 'zip-overlay'; el.className = 'zip-overlay';
+  el.innerHTML = `<div class="zip-box">
+    <div class="zip-spinner" id="zip-spinner"></div>
+    <h3 id="zip-title">Preparando tu descarga…</h3>
+    <p><strong>Por favor espera, esto puede tardar unos minutos.</strong></p>
+    <p>No cierres ni cambies de pestaña hasta que termine.</p>
+    <div class="zip-bar"><div id="zip-bar-fill"></div></div>
+    <p id="zip-detail" style="font-family:var(--f-mono); font-size:12px;"></p>
+    <button class="btn" id="zip-close" style="display:none; margin-top:14px;" onclick="document.getElementById('zip-overlay').remove()">Cerrar</button>
+  </div>`;
+  document.body.appendChild(el);
+  return el;
+}
+function updateZipOverlay(detail, pct){
+  const d = document.getElementById('zip-detail'); if(d) d.textContent = detail;
+  const b = document.getElementById('zip-bar-fill'); if(b && pct!==undefined) b.style.width = Math.round(pct) + '%';
+}
+function finishZipOverlay(title, detail){
+  const sp = document.getElementById('zip-spinner'); if(sp) sp.style.display = 'none';
+  const t = document.getElementById('zip-title'); if(t) t.textContent = title;
+  updateZipOverlay(detail, 100);
+  const c = document.getElementById('zip-close'); if(c) c.style.display = 'inline-block';
+}
 let zipping = false;
 window.__downloadZip = async function(){
   if(zipping || !state.galleryData) return;
@@ -2246,13 +2281,14 @@ window.__downloadZip = async function(){
   const parts = Math.ceil(photos.length / ZIP_CHUNK);
   if(!confirm(`Se prepararán ${photos.length} fotografía(s) en ${parts} archivo(s) ZIP de hasta ${ZIP_CHUNK} fotos cada uno. Puede tardar varios minutos y debes mantener esta pestaña abierta. ¿Continuar?`)) return;
   zipping = true;
+  showZipOverlay();
   const btn = document.getElementById('dl-zip-btn');
   const status = document.getElementById('dl-all-status');
   if(btn) btn.disabled = true;
   try{
     await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
   } catch(e){
-    if(status) status.textContent = 'No se pudo cargar el compresor ZIP. Revisa tu conexión e intenta de nuevo.';
+    finishZipOverlay('No se pudo iniciar', 'No se pudo cargar el compresor ZIP. Revisa tu conexión e intenta de nuevo.');
     if(btn) btn.disabled = false; zipping = false; return;
   }
   const baseName = (state.galleryData.name || 'galeria').replace(/[^\w\-]+/g,'_');
@@ -2262,6 +2298,7 @@ window.__downloadZip = async function(){
     const start = part*ZIP_CHUNK, end = Math.min(start+ZIP_CHUNK, photos.length);
     for(let i=start; i<end; i++){
       if(status) status.textContent = `Parte ${part+1} de ${parts}: preparando foto ${i+1} de ${photos.length}… no cierres esta pestaña.`;
+      updateZipOverlay(`Parte ${part+1} de ${parts} · foto ${i+1} de ${photos.length}`, (i/photos.length)*100);
       try{
         const { bytes, ext } = await fetchPhotoBytes(photos[i]);
         zip.file(`${baseName}_${String(i+1).padStart(3,'0')}.${ext}`, bytes);
@@ -2272,6 +2309,7 @@ window.__downloadZip = async function(){
     }
     if(!Object.keys(zip.files).length) continue;
     if(status) status.textContent = `Parte ${part+1} de ${parts}: comprimiendo…`;
+    updateZipOverlay(`Parte ${part+1} de ${parts} · comprimiendo, casi listo…`, (end/photos.length)*100);
     const blob = await zip.generateAsync({ type:'blob', compression:'STORE' }); // fotos ya vienen comprimidas
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -2283,6 +2321,9 @@ window.__downloadZip = async function(){
   if(status) status.textContent = failed.length
     ? `Listo, pero ${failed.length} foto(s) no se pudieron incluir (n.º ${failed.slice(0,15).join(', ')}${failed.length>15?'…':''}). Usa "Descargar todas" para esas.`
     : `Listo: ${parts} archivo(s) ZIP descargados. Revisa tu carpeta de Descargas.`;
+  finishZipOverlay(failed.length ? 'Descarga lista (con avisos)' : '¡Listo!',
+    failed.length ? `${failed.length} foto(s) no se pudieron incluir (n.º ${failed.slice(0,15).join(', ')}${failed.length>15?'…':''}). Usa "Descargar todas" para esas.`
+                  : `Se descargaron ${parts} archivo(s) ZIP. Revisa tu carpeta de Descargas.`);
   if(btn) btn.disabled = false;
   zipping = false;
 };
