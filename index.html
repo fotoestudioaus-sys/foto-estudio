@@ -183,6 +183,13 @@
     position:absolute; top:24px; right:32px; background:none; border:none; color:#fff; font-size:28px; cursor:pointer;
     font-family:var(--f-mono);
   }
+  .lightbox-nav{
+    position:absolute; top:50%; transform:translateY(-50%); background:rgba(0,0,0,.45); border:1px solid rgba(255,255,255,.25);
+    color:#fff; width:48px; height:48px; border-radius:50%; font-size:22px; cursor:pointer; font-family:var(--f-mono);
+  }
+  .lightbox-nav:hover{background:rgba(0,0,0,.7);}
+  .lightbox-nav.prev{left:20px;} .lightbox-nav.next{right:20px;}
+  .lightbox-count{position:absolute; top:30px; left:0; right:0; text-align:center; color:#bbb; font-family:var(--f-mono); font-size:12px; pointer-events:none;}
   .lightbox-cap{position:absolute; bottom:26px; left:0; right:0; text-align:center; color:#ddd; font-family:var(--f-mono); font-size:12px;}
 
   /* ---- about ---- */
@@ -846,6 +853,8 @@ function renderGaleriaLightbox(){
   return `
   <div class="lightbox" data-action="close-galeria-lightbox">
     <button class="lightbox-close" data-action="close-galeria-lightbox">✕</button>
+    <button class="lightbox-nav prev" onclick="event.stopPropagation(); window.__lbStep(-1)" aria-label="Foto anterior">‹</button>
+    <button class="lightbox-nav next" onclick="event.stopPropagation(); window.__lbStep(1)" aria-label="Foto siguiente">›</button>
     <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
   </div>`;
@@ -857,6 +866,8 @@ function renderLightbox(){
   return `
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
+    <button class="lightbox-nav prev" onclick="event.stopPropagation(); window.__lbStep(-1)" aria-label="Foto anterior">‹</button>
+    <button class="lightbox-nav next" onclick="event.stopPropagation(); window.__lbStep(1)" aria-label="Foto siguiente">›</button>
     <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} — ${escapeHtml(p.category||'')}</div>
   </div>`;
@@ -912,6 +923,9 @@ function renderGalleryLightbox(){
   return `
   <div class="lightbox" data-action="close-lightbox">
     <button class="lightbox-close" data-action="close-lightbox">✕</button>
+    <div class="lightbox-count">${state.lightbox+1} / ${state.galleryData.photos.length}</div>
+    <button class="lightbox-nav prev" onclick="event.stopPropagation(); window.__lbStep(-1)" aria-label="Foto anterior">‹</button>
+    <button class="lightbox-nav next" onclick="event.stopPropagation(); window.__lbStep(1)" aria-label="Foto siguiente">›</button>
     <img src="${normalizeImageUrl(p.url) || p.url}" alt="${escapeHtml(p.caption||'')}" style="filter:${cssFilterFor(p)}">
     <div class="lightbox-cap mono">${escapeHtml(p.caption||'')} · <a href="#" style="color:var(--accent);" onclick="event.stopPropagation(); window.__downloadOnePhoto(${state.lightbox}); return false;">⭳ descargar original</a></div>
   </div>`;
@@ -2272,6 +2286,34 @@ window.__downloadZip = async function(){
   if(btn) btn.disabled = false;
   zipping = false;
 };
+
+/* ---- Navegación del lightbox: flechas del teclado, botones ‹ ›, deslizar en celular ---- */
+function lightboxContext(){
+  if(state.view==='gallery' && state.lightbox!==null && state.galleryData) return { key:'lightbox', len: state.galleryData.photos.length };
+  if(state.view==='public' && state.lightbox!==null) return { key:'lightbox', len: state.portfolio.length };
+  if(state.view==='public' && state.lightboxG!==null) return { key:'lightboxG', len: state.galeria.length };
+  return null;
+}
+window.__lbStep = function(dir){
+  const c = lightboxContext();
+  if(!c || c.len < 2) return;
+  state[c.key] = (state[c.key] + dir + c.len) % c.len; // da la vuelta al llegar al final
+  render();
+};
+document.addEventListener('keydown', (e)=>{
+  const c = lightboxContext();
+  if(!c) return;
+  if(e.key==='ArrowRight'){ e.preventDefault(); window.__lbStep(1); }
+  else if(e.key==='ArrowLeft'){ e.preventDefault(); window.__lbStep(-1); }
+  else if(e.key==='Escape'){ state.lightbox = null; state.lightboxG = null; render(); }
+});
+let _touchX = null;
+document.addEventListener('touchstart', (e)=>{ _touchX = e.touches[0].clientX; }, { passive:true });
+document.addEventListener('touchend', (e)=>{
+  if(_touchX === null || !lightboxContext()) { _touchX = null; return; }
+  const dx = e.changedTouches[0].clientX - _touchX; _touchX = null;
+  if(Math.abs(dx) > 60) window.__lbStep(dx < 0 ? 1 : -1);
+}, { passive:true });
 
 /* init */
 loadInitial();
