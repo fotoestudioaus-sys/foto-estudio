@@ -477,9 +477,12 @@
   .pub .gallery-hero .eyebrow{justify-content:center; color:var(--b-blue);}
   .pub .gallery-hero h1{font-family:var(--f-display); font-style:normal; font-weight:800; text-transform:uppercase; font-size:clamp(28px,4.6vw,52px);}
   .pub .gal-logo{width:84px; height:84px; margin:0 auto 10px;}
+  .pub .gallery-hero .btn{margin:4px 5px;}
   .pub .gallery-meta{color:var(--b-ink); font-family:var(--f-body); font-weight:500; letter-spacing:.08em;}
   .pub .gallery-grid{gap:26px; padding:50px 10px 50px 0;}
   .pub .gallery-grid .frame{border-radius:16px;}
+  .pub .expired-box{margin:70px auto;}
+  .pub .expired-box .gal-logo{display:block; margin-left:auto; margin-right:auto;}
   .pub .expired-box h1{font-family:var(--f-display); font-weight:800; color:var(--b-blue);}
   .pub .expired-box .eyebrow{color:var(--b-mag);}
 
@@ -1290,27 +1293,41 @@ function renderLightbox(){
 }
 
 /* ---------------------------- CLIENT GALLERY ---------------------------- */
+/* Encabezado de marca para los enlaces de clientes (solo logo, sin menú del sitio) */
+function renderClientHeader(){
+  return `
+  <header class="site"><div class="wrap nav">
+    <div class="brand">
+      <img src="${BRAND.badge}" alt="" width="50" height="50">
+      <span class="brand-text"><b>Fotoaus</b><small>Estudio</small></span>
+    </div>
+    <span class="eyebrow" style="letter-spacing:.2em;">Entrega de fotografías</span>
+  </div></header>`;
+}
+
 function renderGallery(){
   const g = state.galleryData;
   if(!g){
-    return `<div class="expired-box">
+    return `${renderClientHeader()}<div class="expired-box">
+      <img class="gal-logo" src="${BRAND.badge}" alt="" style="margin-bottom:18px;">
       <div class="eyebrow">Galería no encontrada</div>
       <h1>Este enlace no corresponde a ninguna galería activa.</h1>
       <p class="hint" style="margin-top:14px;">Verifica el enlace con tu fotógrafo.</p>
-    </div>`;
+    </div>${renderFooter()}`;
   }
   const expired = new Date(g.expiresAt) < new Date();
   if(expired){
-    return `<div class="expired-box">
+    return `${renderClientHeader()}<div class="expired-box">
+      <img class="gal-logo" src="${BRAND.badge}" alt="" style="margin-bottom:18px;">
       <div class="eyebrow">Enlace expirado</div>
       <h1>Esta galería ya no está disponible.</h1>
       <p class="hint" style="margin-top:14px;">Expiró el ${fmtDate(g.expiresAt)}. Pide a tu fotógrafo que genere un nuevo enlace.</p>
-    </div>`;
+    </div>${renderFooter()}`;
   }
   return `
+  ${renderClientHeader()}
   <div class="gallery-hero">
     <div class="wrap">
-      <img class="gal-logo" src="${BRAND.badge}" alt="Fotoaus Estudio">
       <div class="eyebrow mono">Galería privada</div>
       <h1>${escapeHtml(g.name)}</h1>
       <div class="gallery-meta">${g.photos.length} fotografías · disponible hasta ${fmtDate(g.expiresAt)}</div>
