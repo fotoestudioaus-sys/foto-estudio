@@ -455,6 +455,37 @@
   /* sobre mí / contacto / pie */
   .pub .about img{border-radius:999px 999px 18px 18px; border:6px solid var(--b-cyan); aspect-ratio:4/5; object-fit:cover; box-shadow:10px 10px 0 var(--b-mag);}
   .pub .about-text p{color:var(--b-soft);}
+
+  /* ---- Página Servicios ---- */
+  .pub .svc-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:30px;}
+  .pub .svc-grid.three{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .pub .svc-card{position:relative; background:#fff; border:3px solid var(--b-blue); border-radius:22px; padding:26px 26px 24px; box-shadow:8px 8px 0 var(--b-cyan); display:flex; flex-direction:column;}
+  .pub .svc-card h3{margin:10px 0 0; font-family:var(--f-display); font-weight:800; text-transform:uppercase; color:var(--b-blue); font-size:20px; letter-spacing:.02em; line-height:1.15;}
+  .pub .svc-pill{align-self:flex-start; background:var(--b-blue); color:#fff; border-radius:999px; padding:4px 12px; font-weight:700; font-size:10px; letter-spacing:.16em; text-transform:uppercase;}
+  .pub .svc-price{font-family:var(--f-display); font-weight:800; color:var(--b-mag); font-size:28px; line-height:1.2; margin:12px 0 2px;}
+  .pub .svc-sub{color:var(--b-soft); font-size:13px; margin:0;}
+  .pub .svc-card ul{list-style:none; padding:0; margin:14px 0 0;}
+  .pub .svc-card li{position:relative; padding-left:20px; margin:8px 0; font-size:14.5px; color:var(--b-ink);}
+  .pub .svc-card li::before{content:''; position:absolute; left:0; top:.6em; width:8px; height:8px; border-radius:50%; background:var(--b-cyan); border:2px solid var(--b-blue); box-sizing:border-box;}
+  .pub .svc-note{margin:auto 0 0; padding-top:14px; font-size:13px; color:var(--b-soft);}
+  .pub .svc-card.featured{border-color:var(--b-mag); box-shadow:8px 8px 0 var(--b-blue);}
+  .pub .svc-card.featured::before{content:'Más pedido'; position:absolute; top:-14px; left:22px; background:var(--b-mag); color:#fff; font-weight:700; font-size:10px; letter-spacing:.18em; text-transform:uppercase; padding:5px 12px; border-radius:999px;}
+  .pub section.svc-band{background:var(--b-wash); border-top:4px solid var(--b-cyan); border-bottom:4px solid var(--b-cyan);}
+  .pub .svc-head{max-width:62ch; margin-bottom:34px;}
+  .pub .svc-head p{color:var(--b-soft); margin:10px 0 0;}
+  .pub .svc-promo{display:grid; grid-template-columns:1.3fr 1fr; gap:34px; background:var(--b-blue); color:#fff; border-radius:26px; padding:34px; box-shadow:10px 10px 0 var(--b-mag);}
+  .pub .svc-promo h3{font-family:var(--f-display); font-weight:800; text-transform:uppercase; font-size:26px; margin:12px 0 6px; line-height:1.1;}
+  .pub .svc-promo .svc-pill{background:var(--b-cyan); color:var(--b-blue);}
+  .pub .svc-promo ul{list-style:none; padding:0; margin:12px 0;}
+  .pub .svc-promo li{margin:6px 0; padding-left:20px; position:relative; font-size:14.5px;}
+  .pub .svc-promo li::before{content:''; position:absolute; left:0; top:.6em; width:8px; height:8px; border-radius:50%; background:var(--b-cyan);}
+  .pub .svc-promo .big{font-family:var(--f-display); font-weight:800; font-size:52px; color:var(--b-cyan); line-height:1;}
+  .pub .svc-promo .svc-sub, .pub .svc-promo .svc-note{color:#cfd2ff;}
+  .pub .svc-terms{background:#fff; border:3px solid var(--b-blue); border-radius:22px; padding:12px 30px; box-shadow:8px 8px 0 var(--b-cyan);}
+  .pub .svc-terms li{margin:12px 0;}
+  .pub .svc-nav{display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin-top:22px;}
+  @media (max-width:900px){ .pub .svc-grid.three{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media (max-width:680px){ .pub .svc-grid,.pub .svc-grid.three{grid-template-columns:1fr;} .pub .svc-promo{grid-template-columns:1fr; padding:26px 22px;} .pub .svc-promo .big{font-size:42px;} }
   .pub .contact-band{background:var(--b-cyan); color:var(--b-blue);}
   .pub .contact-band .section-title, .pub .contact-band .eyebrow{color:var(--b-blue);}
   .pub .contact-grid{align-items:center;}
@@ -980,6 +1011,7 @@ async function loadInitial(){
 /* ---- Rutas del sitio público: ?galeria (todos los rotafolios) y ?galeria=<rotafolio> ---- */
 function parseRoute(){
   const params = new URLSearchParams(location.search);
+  if(params.has('servicios')) return { view:'servicios' };
   if(params.has('galeria')){
     const slug = params.get('galeria');
     return slug ? { view:'galeria-cat', slug } : { view:'galeria-hub' };
@@ -989,7 +1021,7 @@ function parseRoute(){
 function navigate(view, slug){
   state.lightbox = null; state.lightboxG = null;
   state.view = view; state.rotafolio = slug || null;
-  const url = view === 'galeria-hub' ? '?galeria' : view === 'galeria-cat' ? '?galeria=' + encodeURIComponent(slug) : location.pathname;
+  const url = view === 'servicios' ? '?servicios' : view === 'galeria-hub' ? '?galeria' : view === 'galeria-cat' ? '?galeria=' + encodeURIComponent(slug) : location.pathname;
   history.pushState({}, '', url);
   render();
   window.scrollTo(0, 0);
@@ -1023,6 +1055,7 @@ function render(){
   const app = document.getElementById('app');
   app.className = (state.view === 'admin' || state.view === 'admin-login') ? '' : 'pub';
   if(state.view === 'public') app.innerHTML = renderPublic();
+  else if(state.view === 'servicios') app.innerHTML = renderServicios();
   else if(state.view === 'galeria-hub') app.innerHTML = renderGaleriaHub();
   else if(state.view === 'galeria-cat') app.innerHTML = renderRotafolio(state.rotafolio);
   else if(state.view === 'gallery') app.innerHTML = renderGallery();
@@ -1049,6 +1082,7 @@ function renderHeader(active){
       <nav class="navlinks">
         ${link('portafolio','Portafolio')}
         <a href="?galeria" data-action="go-galeria" class="${active==='galeria'?'on':''}">Galería</a>
+        <a href="?servicios" data-action="go-servicios" class="${active==='servicios'?'on':''}">Servicios</a>
         ${link('sobre-mi','Sobre mí')}
         ${link('contacto','Contacto')}
         <button class="admin-link" data-action="go-admin" title="Acceso administrador">Acceso</button>
@@ -1190,6 +1224,165 @@ function renderPublic(){
 }
 
 /* ---- Página "Galería": todos los rotafolios ---- */
+/* ---- Página Servicios (?servicios) ---- */
+const SERVICIOS = {
+  servicios: [
+    { tag:'Eventos', title:'Festivales y eventos por día', price:'Desde $1,500 MXN', sub:'Cobertura de hasta 3 horas.',
+      items:['40–70 fotografías editadas.','Ambiente, asistentes, detalles y momentos destacados.','Entrega digital estimada de 3 a 5 días hábiles.'],
+      note:'Jornada completa: desde $4,000 MXN, según duración y necesidades.' },
+    { tag:'Retrato', title:'Sesión fotográfica individual', price:'$699 MXN', sub:'Sesión de 30 minutos.',
+      items:['8 fotografías editadas.','Una locación.','Entrega digital.'],
+      note:'Ideal para retratos, parejas, cumpleaños, graduaciones y redes sociales.' },
+    { tag:'Celebraciones', title:'Paquetes para eventos', price:'Desde $1,299 MXN',
+      items:['<b>Esencial — $1,299:</b> 1 hora y 15 fotos editadas.','<b>Especial — $2,199:</b> 2 horas y 30 fotos editadas.','<b>Premium — $3,499:</b> 3 horas y 50 fotos editadas.'],
+      note:'Para cumpleaños, aniversarios, reuniones familiares y graduaciones.' },
+    { tag:'Contenido digital', title:'Edición de video', price:'Desde $599 MXN',
+      items:['<b>Reel básico — $599:</b> hasta 30 segundos.','<b>Reel profesional — $999:</b> hasta 60 segundos, música y subtítulos sencillos.','<b>Resumen de evento — $1,499:</b> video de 1–2 minutos con material proporcionado.'],
+      note:'La grabación se cotiza aparte si no está incluida en el paquete.' }
+  ],
+  paquetes: [
+    { title:'Recuerdos Especiales', price:'$999 MXN',
+      items:['Sesión de 45 minutos.','12 fotografías editadas.','Una locación.','Una impresión de 20 × 30 cm.'],
+      note:'Para parejas, retratos personales y regalos.' },
+    { title:'Evento Completo', price:'$2,499 MXN', featured:true,
+      items:['Cobertura de 2 horas.','35 fotografías editadas.','Video resumen vertical de hasta 30 segundos.','Galería digital.'],
+      note:'Para cumpleaños, reuniones y celebraciones pequeñas.' },
+    { title:'Marca Visual', price:'$1,499 MXN',
+      items:['Sesión para negocio o marca personal de 1 hora.','15 fotografías editadas.','2 reels de hasta 20 segundos, editados con material de la sesión.','Archivos optimizados para redes sociales.'],
+      note:'Para emprendedores, restaurantes y pequeños negocios.' }
+  ],
+  paquetesNota:'Los paquetes con video requieren grabación durante la sesión o evento. Se acuerdan previamente el alcance, las entregas y las revisiones incluidas.',
+  impresiones: [
+    { tag:'Formato pequeño', title:'Impresión 10 × 15 cm', price:'Desde $447 MXN', note:'Ideal para recuerdos, regalos y pequeñas colecciones.' },
+    { tag:'Formato mediano', title:'Impresión 20 × 30 cm', price:'Desde $897 MXN', featured:true, note:'Una opción para destacar una fotografía en repisas o espacios personales.' },
+    { tag:'Formato grande', title:'Impresión 30 × 45 cm', price:'Desde $1,497 MXN', note:'Para dar protagonismo a fotografías artísticas, urbanas o de naturaleza.' }
+  ],
+  impresionesNota:'Impresiones enmarcadas, distintos tipos de papel, acabados y soportes se cotizan individualmente según el material, tamaño y disponibilidad.',
+  promo: {
+    tag:'Primeras 5 reservas confirmadas', title:'Sesión fotográfica de lanzamiento', price:'$599 MXN',
+    items:['30 minutos de sesión.','8 fotografías editadas.','Entrega digital.'],
+    note:'Promoción sujeta a disponibilidad.',
+    extras:['5 fotos adicionales: +$200.','Impresión 20 × 30 cm: +$897.','Reel de hasta 30 segundos: +$399.']
+  },
+  condiciones:[
+    'Se solicita un anticipo del 50% para reservar una fecha.',
+    'Se acuerdan por escrito duración, cantidad de fotografías y fecha de entrega.',
+    'Traslados, horas extra, impresiones especiales y entregas urgentes pueden tener un costo adicional.',
+    'Los eventos grandes se cotizan según duración, aforo, necesidades y uso comercial de las imágenes.',
+    'La edición de video especifica duración, material de origen y número de revisiones.',
+    'Los precios de impresiones pueden variar según materiales, acabados y envío.'
+  ]
+};
+function svcCard(x, grid){
+  return `
+  <article class="svc-card${x.featured?' featured':''}">
+    ${x.tag ? `<span class="svc-pill">${escapeHtml(x.tag)}</span>` : ''}
+    <h3>${escapeHtml(x.title)}</h3>
+    <div class="svc-price">${escapeHtml(x.price)}</div>
+    ${x.sub ? `<p class="svc-sub">${escapeHtml(x.sub)}</p>` : ''}
+    ${x.items ? `<ul>${x.items.map(i=>`<li>${i}</li>`).join('')}</ul>` : ''}
+    ${x.note ? `<p class="svc-note">${escapeHtml(x.note)}</p>` : ''}
+  </article>`;
+}
+function renderServicios(){
+  const S = SERVICIOS, c = state.content || {};
+  const ig = (c.instagram||'').replace('@','');
+  return `
+  ${renderHeader('servicios')}
+  <section class="page-hero">
+    <div class="wrap">
+      <div class="eyebrow" style="justify-content:center;">Fotografía · Eventos · Arte visual</div>
+      <h1>Servicios y paquetes</h1>
+      <p>Transformamos momentos, espacios e historias en fotografías y contenido visual para recordar, compartir y dar personalidad a tu marca.</p>
+      <div class="svc-nav">
+        <a class="btn solid" href="#paquetes" data-action="svc-scroll" data-anchor="paquetes">Ver paquetes</a>
+        <a class="btn" href="#svc-contacto" data-action="svc-scroll" data-anchor="svc-contacto">Solicitar cotización</a>
+      </div>
+    </div>
+  </section>
+  ${ORN}
+
+  <section id="servicios">
+    <div class="wrap">
+      <div class="svc-head">
+        <div class="eyebrow">Qué ofrecemos</div>
+        <h2 class="section-title">Servicios fotográficos</h2>
+        <p>Opciones para personas, celebraciones, negocios y proyectos creativos. Los precios son iniciales y pueden ajustarse según ubicación, duración y requerimientos.</p>
+      </div>
+      <div class="svc-grid">${S.servicios.map(svcCard).join('')}</div>
+    </div>
+  </section>
+
+  <section id="paquetes" class="svc-band">
+    <div class="wrap">
+      <div class="svc-head">
+        <div class="eyebrow">Combos recomendados</div>
+        <h2 class="section-title">Paquetes para cada ocasión</h2>
+        <p>Combina fotografía, impresiones y video para obtener una experiencia más completa.</p>
+      </div>
+      <div class="svc-grid three">${S.paquetes.map(svcCard).join('')}</div>
+      <p class="hint" style="margin-top:26px; font-size:13px;">${escapeHtml(S.paquetesNota)}</p>
+    </div>
+  </section>
+
+  <section id="impresiones">
+    <div class="wrap">
+      <div class="svc-head">
+        <div class="eyebrow">Fotografía que puedes conservar</div>
+        <h2 class="section-title">Impresiones y arte para pared</h2>
+        <p>Convierte fotografías urbanas, arquitectura, paisajes y arte visual en piezas para decorar tu hogar, oficina o negocio.</p>
+      </div>
+      <div class="svc-grid three">${S.impresiones.map(svcCard).join('')}</div>
+      <div class="svc-card" style="margin-top:30px;">
+        <h3 style="margin-top:0;">Cuadros, materiales y acabados especiales</h3>
+        <p class="svc-sub" style="font-size:14.5px; margin-top:8px;">${escapeHtml(S.impresionesNota)}</p>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding-top:20px;">
+    <div class="wrap">
+      <div class="svc-promo">
+        <div>
+          <span class="svc-pill">${escapeHtml(S.promo.tag)}</span>
+          <h3>${escapeHtml(S.promo.title)}</h3>
+          <ul>${S.promo.items.map(i=>`<li>${i}</li>`).join('')}</ul>
+          <p class="svc-note" style="padding-top:4px;">${escapeHtml(S.promo.note)}</p>
+        </div>
+        <div>
+          <div class="big">${escapeHtml(S.promo.price)}</div>
+          <p class="svc-sub" style="margin-top:10px;">Complementos opcionales:</p>
+          <ul>${S.promo.extras.map(i=>`<li>${i}</li>`).join('')}</ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="svc-head" style="margin-bottom:24px;">
+        <div class="eyebrow">Condiciones de servicio</div>
+        <h2 class="section-title">Información importante</h2>
+      </div>
+      <div class="svc-card svc-terms"><ul>${S.condiciones.map(i=>`<li>${escapeHtml(i)}</li>`).join('')}</ul></div>
+    </div>
+  </section>
+
+  <section class="contact-band" id="svc-contacto">
+    <div class="wrap" style="text-align:center;">
+      <div class="eyebrow" style="justify-content:center;">Fotoaus Estudio</div>
+      <h2 class="section-title">Hagamos algo que valga la pena recordar</h2>
+      <p style="max-width:60ch; margin:14px auto 26px; color:var(--b-ink);">Cuéntame qué necesitas fotografiar o qué tipo de impresión buscas. Revisamos los detalles y preparamos una cotización según tu proyecto.</p>
+      <div class="contact-links" style="justify-content:center;">
+        ${c.calendlyLink ? `<a class="btn solid" href="${c.calendlyLink}" target="_blank" rel="noopener">Agendar cita</a>` : ''}
+        ${c.contactEmail ? `<a class="btn" href="mailto:${c.contactEmail}?subject=${encodeURIComponent('Cotización de servicios')}">${escapeHtml(c.contactEmail)}</a>` : ''}
+        ${ig ? `<a class="btn" href="https://instagram.com/${ig}" target="_blank" rel="noopener">${escapeHtml(c.instagram)}</a>` : ''}
+      </div>
+    </div>
+  </section>
+  ${renderFooter()}`;
+}
+
 function renderGaleriaHub(){
   const total = state.galeria.length;
   return `
@@ -2088,9 +2281,11 @@ function bindEvents(){
 async function onAction(e){
   const action = e.currentTarget.dataset.action;
   const d = e.currentTarget.dataset;
-  if(action && action.startsWith('go-') && e.currentTarget.tagName === 'A') e.preventDefault(); // enlaces que navegan dentro del sitio
+  if(action && (action.startsWith('go-') || action==='svc-scroll') && e.currentTarget.tagName === 'A') e.preventDefault(); // enlaces que navegan dentro del sitio
 
   if(action==='go-galeria'){ navigate('galeria-hub'); return; }
+  if(action==='go-servicios'){ navigate('servicios'); return; }
+  if(action==='svc-scroll'){ const el=document.getElementById(d.anchor); if(el) el.scrollIntoView({behavior:'smooth'}); return; }
   if(action==='go-rotafolio'){ navigate('galeria-cat', d.slug); return; }
   if(action==='rotafolio-more'){ state.rotafolioVisible[d.slug] = (state.rotafolioVisible[d.slug] || ROTAFOLIO_PAGE_SIZE) + ROTAFOLIO_PAGE_SIZE; render(); return; }
   if(action==='go-home'){
